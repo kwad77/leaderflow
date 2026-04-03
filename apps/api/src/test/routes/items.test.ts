@@ -144,7 +144,7 @@ describe('POST /api/items', () => {
       });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('Validation error');
+    expect(res.body.error).toBe('Validation failed');
   });
 
   it('returns 400 when type is invalid (Zod validation)', async () => {
@@ -160,7 +160,7 @@ describe('POST /api/items', () => {
       });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('Validation error');
+    expect(res.body.error).toBe('Validation failed');
   });
 
   it('returns 400 when priority is invalid (Zod validation)', async () => {
@@ -176,7 +176,7 @@ describe('POST /api/items', () => {
       });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('Validation error');
+    expect(res.body.error).toBe('Validation failed');
   });
 });
 

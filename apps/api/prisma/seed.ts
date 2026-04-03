@@ -3,11 +3,30 @@ import { PrismaClient, WorkItemType, WorkItemStatus, Priority } from '@prisma/cl
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🌱 Seeding database...');
+  console.log('Seeding database...');
+
+  // Idempotency guard: if Acme Corp already exists, only update settings and exit
+  const existing = await prisma.organization.findFirst({ where: { name: 'Acme Corp' } });
+  if (existing) {
+    console.log('Seed data already exists, updating settings only...');
+    await prisma.organization.update({
+      where: { id: existing.id },
+      data: {
+        settings: {
+          staleThresholdHours: 48,
+          atRiskHoursBeforeDue: 24,
+          slaByPriority: { LOW: 168, MEDIUM: 72, HIGH: 24, URGENT: 4 },
+        },
+      },
+    });
+    console.log('Settings updated. Exiting.');
+    process.exit(0);
+  }
 
   // Clean existing data
   await prisma.workItemUpdate.deleteMany();
   await prisma.workItem.deleteMany();
+  await prisma.automationRule.deleteMany();
   await prisma.integration.deleteMany();
   await prisma.member.deleteMany();
   await prisma.organization.deleteMany();
@@ -16,6 +35,18 @@ async function main() {
   const org = await prisma.organization.create({
     data: {
       name: 'Acme Corp',
+    },
+  });
+
+  // Apply org settings
+  await prisma.organization.update({
+    where: { id: org.id },
+    data: {
+      settings: {
+        staleThresholdHours: 48,
+        atRiskHoursBeforeDue: 24,
+        slaByPriority: { LOW: 168, MEDIUM: 72, HIGH: 24, URGENT: 4 },
+      },
     },
   });
 
@@ -97,11 +128,56 @@ async function main() {
 
   console.log(`  Created 7 members`);
 
+  // Notification preferences on Marcus and Emma
+  await prisma.member.update({
+    where: { id: marcus.id },
+    data: {
+      metadata: {
+        notifications: {
+          emailDigest: 'daily',
+          emailDigestTime: '08:00',
+          slackDm: true,
+          notifyOn: {
+            newAssignment: true,
+            escalation: true,
+            overdue: true,
+            atRisk: false,
+            aiSuggestion: false,
+          },
+        },
+      },
+    },
+  });
+
+  await prisma.member.update({
+    where: { id: emma.id },
+    data: {
+      metadata: {
+        notifications: {
+          emailDigest: 'weekly',
+          emailDigestTime: '09:00',
+          slackDm: false,
+          notifyOn: {
+            newAssignment: true,
+            escalation: true,
+            overdue: true,
+            atRisk: true,
+            aiSuggestion: true,
+          },
+        },
+      },
+    },
+  });
+
   const now = new Date();
   const daysAgo = (d: number) => new Date(now.getTime() - d * 24 * 60 * 60 * 1000);
   const hoursAgo = (h: number) => new Date(now.getTime() - h * 60 * 60 * 1000);
+  const hoursFromNow = (h: number) => new Date(now.getTime() + h * 60 * 60 * 1000);
+  const daysFromNow = (d: number) => new Date(now.getTime() + d * 24 * 60 * 60 * 1000);
 
-  // 3 INGRESS items for Sarah (new, unprocessed)
+  // -----------------------------------------------------------------------
+  // INGRESS items for Sarah (new, unprocessed)
+  // -----------------------------------------------------------------------
   const ingress1 = await prisma.workItem.create({
     data: {
       title: 'Board deck review request from investor',
@@ -148,7 +224,9 @@ async function main() {
     },
   });
 
-  // 2 ESCALATION items bubbling up
+  // -----------------------------------------------------------------------
+  // ESCALATION items bubbling up
+  // -----------------------------------------------------------------------
   const escalation1 = await prisma.workItem.create({
     data: {
       title: 'Production outage: payment service down',
@@ -161,15 +239,6 @@ async function main() {
       toMemberId: marcus.id,
       source: 'internal',
       createdAt: hoursAgo(1),
-    },
-  });
-
-  await prisma.workItemUpdate.create({
-    data: {
-      itemId: escalation1.id,
-      authorId: alex.id,
-      note: 'Identified root cause: bad deploy at 14:30. Rollback ready but needs approval.',
-      createdAt: hoursAgo(0.5),
     },
   });
 
@@ -188,7 +257,9 @@ async function main() {
     },
   });
 
-  // 3 DELEGATION items flowing down
+  // -----------------------------------------------------------------------
+  // DELEGATION items flowing down
+  // -----------------------------------------------------------------------
   const delegation1 = await prisma.workItem.create({
     data: {
       title: 'Prepare Q2 engineering roadmap',
@@ -199,18 +270,9 @@ async function main() {
       orgId: org.id,
       fromMemberId: sarah.id,
       toMemberId: marcus.id,
-      dueAt: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+      dueAt: daysFromNow(7),
       source: 'internal',
       createdAt: daysAgo(2),
-    },
-  });
-
-  await prisma.workItemUpdate.create({
-    data: {
-      itemId: delegation1.id,
-      authorId: marcus.id,
-      note: 'Started drafting with tech leads. 60% complete.',
-      createdAt: daysAgo(1),
     },
   });
 
@@ -224,7 +286,7 @@ async function main() {
       orgId: org.id,
       fromMemberId: sarah.id,
       toMemberId: marcus.id,
-      dueAt: new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000),
+      dueAt: daysFromNow(60),
       acknowledgedAt: daysAgo(1),
       source: 'internal',
       createdAt: daysAgo(3),
@@ -241,29 +303,42 @@ async function main() {
       orgId: org.id,
       fromMemberId: sarah.id,
       toMemberId: priya.id,
-      dueAt: new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000),
+      dueAt: daysFromNow(5),
       acknowledgedAt: daysAgo(2),
       source: 'internal',
       createdAt: daysAgo(4),
     },
   });
 
-  await prisma.workItemUpdate.create({
+  // -----------------------------------------------------------------------
+  // AT_RISK item — demonstrates SLA badge (due in 2 hours)
+  // -----------------------------------------------------------------------
+  const atRisk1 = await prisma.workItem.create({
     data: {
-      itemId: delegation3.id,
-      authorId: priya.id,
-      note: 'Draft OKRs shared with team. Awaiting feedback from David and Emma.',
-      createdAt: daysAgo(1),
+      title: 'Finalize security audit report for compliance review',
+      description: 'Compliance team requires the security audit report before the board meeting today. Deadline is approaching.',
+      type: WorkItemType.DELEGATION,
+      status: WorkItemStatus.AT_RISK,
+      priority: Priority.HIGH,
+      orgId: org.id,
+      fromMemberId: marcus.id,
+      toMemberId: alex.id,
+      dueAt: hoursFromNow(2),
+      acknowledgedAt: daysAgo(1),
+      source: 'internal',
+      createdAt: daysAgo(3),
     },
   });
 
-  // 1 AT_RISK item (due date in the past)
-  const atRisk1 = await prisma.workItem.create({
+  // -----------------------------------------------------------------------
+  // OVERDUE item — dueAt in the past
+  // -----------------------------------------------------------------------
+  const overdue1 = await prisma.workItem.create({
     data: {
       title: 'Migrate legacy auth system to OAuth2',
       description: 'Critical security upgrade. Auth system migration was due last week.',
       type: WorkItemType.DELEGATION,
-      status: WorkItemStatus.AT_RISK,
+      status: WorkItemStatus.OVERDUE,
       priority: Priority.URGENT,
       orgId: org.id,
       fromMemberId: marcus.id,
@@ -275,32 +350,186 @@ async function main() {
     },
   });
 
-  // 1 STALE item (no update in 3+ days)
+  // -----------------------------------------------------------------------
+  // STALE item — no update in 3+ days
+  // -----------------------------------------------------------------------
   const stale1 = await prisma.workItem.create({
     data: {
       title: 'User research synthesis for mobile onboarding',
-      description: 'Emma to synthesize user research from last month\'s mobile onboarding interviews.',
+      description: "Emma to synthesize user research from last month's mobile onboarding interviews.",
       type: WorkItemType.DELEGATION,
       status: WorkItemStatus.STALE,
       priority: Priority.MEDIUM,
       orgId: org.id,
       fromMemberId: priya.id,
       toMemberId: emma.id,
-      dueAt: new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000),
+      dueAt: daysFromNow(3),
       acknowledgedAt: daysAgo(5),
       source: 'internal',
       createdAt: daysAgo(8),
     },
   });
 
-  console.log(`  Created 10 work items`);
-  console.log('  - 3 INGRESS items for Sarah');
-  console.log('  - 2 ESCALATION items (Alex→Marcus, Marcus→Sarah)');
-  console.log('  - 3 DELEGATION items (Sarah→Marcus x2, Sarah→Priya)');
-  console.log('  - 1 AT_RISK item (Jamie, overdue)');
-  console.log('  - 1 STALE item (Emma, no updates)');
+  // -----------------------------------------------------------------------
+  // COMPLETED items — gives metrics dashboard real data
+  // -----------------------------------------------------------------------
+  const completed1 = await prisma.workItem.create({
+    data: {
+      title: 'Launch redesigned onboarding flow',
+      description: 'Ship the new onboarding flow to 100% of new users. A/B test complete; winner selected.',
+      type: WorkItemType.DELEGATION,
+      status: WorkItemStatus.COMPLETED,
+      priority: Priority.HIGH,
+      orgId: org.id,
+      fromMemberId: priya.id,
+      toMemberId: david.id,
+      dueAt: daysAgo(1),
+      acknowledgedAt: daysAgo(10),
+      completedAt: daysAgo(1),
+      source: 'internal',
+      createdAt: daysAgo(14),
+    },
+  });
 
-  // Add an integration stub
+  const completed2 = await prisma.workItem.create({
+    data: {
+      title: 'Patch CVE-2024-1234 in API gateway',
+      description: 'Critical vulnerability in the API gateway dependency. Patched and deployed to production.',
+      type: WorkItemType.ESCALATION,
+      status: WorkItemStatus.COMPLETED,
+      priority: Priority.URGENT,
+      orgId: org.id,
+      fromMemberId: alex.id,
+      toMemberId: marcus.id,
+      acknowledgedAt: daysAgo(5),
+      completedAt: daysAgo(4),
+      source: 'internal',
+      createdAt: daysAgo(6),
+    },
+  });
+
+  // -----------------------------------------------------------------------
+  // AI-suggested item — demonstrates triage modal
+  // -----------------------------------------------------------------------
+  const aiSuggested1 = await prisma.workItem.create({
+    data: {
+      title: 'Unexpected spike in API error rate — investigate root cause',
+      description: 'Error rate jumped from 0.2% to 4.8% over the last hour. Affects checkout and profile endpoints.',
+      type: WorkItemType.INGRESS,
+      status: WorkItemStatus.PENDING,
+      priority: Priority.MEDIUM,
+      orgId: org.id,
+      toMemberId: sarah.id,
+      fromExternal: 'monitoring@pagerduty.com',
+      source: 'pagerduty',
+      aiSuggestedPriority: 'HIGH',
+      aiSuggestedOwner: marcus.id,
+      aiRationale:
+        'Error pattern matches infrastructure-layer failures. Marcus owns the platform team and resolved the last two similar incidents. Recommend upgrading priority to HIGH and routing directly to him.',
+      createdAt: hoursAgo(0.5),
+    },
+  });
+
+  console.log(`  Created 15 work items`);
+  console.log('  - 3 INGRESS items for Sarah (incl. 1 with AI suggestion)');
+  console.log('  - 2 ESCALATION items (Alex->Marcus, Marcus->Sarah)');
+  console.log('  - 3 DELEGATION items (Sarah->Marcus x2, Sarah->Priya)');
+  console.log('  - 1 AT_RISK item (Alex, due in 2h) — SLA badge demo');
+  console.log('  - 1 OVERDUE item (Jamie)');
+  console.log('  - 1 STALE item (Emma)');
+  console.log('  - 2 COMPLETED items — metrics dashboard data');
+
+  // -----------------------------------------------------------------------
+  // WorkItemUpdate activity history
+  // -----------------------------------------------------------------------
+  await prisma.workItemUpdate.createMany({
+    data: [
+      // Escalation 1: payment outage
+      {
+        itemId: escalation1.id,
+        authorId: alex.id,
+        note: 'Identified root cause: bad deploy at 14:30. Rollback ready but needs approval.',
+        createdAt: hoursAgo(0.5),
+      },
+      // Delegation 1: Q2 roadmap
+      {
+        itemId: delegation1.id,
+        authorId: marcus.id,
+        note: 'Started drafting with tech leads. 60% complete.',
+        createdAt: daysAgo(1),
+      },
+      // Delegation 3: OKRs
+      {
+        itemId: delegation3.id,
+        authorId: priya.id,
+        note: 'Draft OKRs shared with team. Awaiting feedback from David and Emma.',
+        createdAt: daysAgo(1),
+      },
+      // AT_RISK item: security audit
+      {
+        itemId: atRisk1.id,
+        authorId: alex.id,
+        note: 'Reviewed with team, need more context on the network segmentation findings.',
+        createdAt: hoursAgo(2),
+      },
+      {
+        itemId: atRisk1.id,
+        authorId: marcus.id,
+        note: 'Escalated to Sarah per protocol — deadline is today.',
+        statusChange: 'ESCALATION',
+        createdAt: hoursAgo(4),
+      },
+      // Overdue item: legacy auth
+      {
+        itemId: overdue1.id,
+        authorId: jamie.id,
+        note: 'Blocked on IdP configuration access. Waiting on IT provisioning.',
+        createdAt: daysAgo(4),
+      },
+      // Completed 1: onboarding flow
+      {
+        itemId: completed1.id,
+        authorId: david.id,
+        note: 'Shipped to 100% of new users. Activation rate up 12% vs control.',
+        statusChange: 'COMPLETED',
+        createdAt: daysAgo(1),
+      },
+    ],
+  });
+
+  console.log(`  Created 7 work item updates`);
+
+  // -----------------------------------------------------------------------
+  // Automation rules
+  // -----------------------------------------------------------------------
+  await prisma.automationRule.createMany({
+    data: [
+      {
+        orgId: org.id,
+        name: 'Auto-route security issues',
+        description: 'Delegate items mentioning security to the security lead',
+        type: 'routing_rule',
+        condition: { titleContains: 'security' },
+        action: { type: 'delegate', toMemberId: marcus.id },
+        enabled: true,
+      },
+      {
+        orgId: org.id,
+        name: 'Flag urgent ingress',
+        description: 'Mark URGENT any new ingress items',
+        type: 'status_update',
+        condition: { type: 'INGRESS', priority: 'URGENT' },
+        action: { type: 'updateStatus', status: 'IN_PROGRESS' },
+        enabled: false, // disabled by default — users enable it
+      },
+    ],
+  });
+
+  console.log(`  Created 2 automation rules`);
+
+  // -----------------------------------------------------------------------
+  // Integration stub
+  // -----------------------------------------------------------------------
   await prisma.integration.create({
     data: {
       orgId: org.id,
@@ -310,15 +539,21 @@ async function main() {
     },
   });
 
-  console.log('✅ Seed complete!');
-  console.log(`\n📊 Summary:`);
-  console.log(`   Org ID: ${org.id}`);
-  console.log(`   CEO: Sarah Chen (${sarah.id})`);
+  console.log('Seed complete!');
+  console.log(`\nSummary:`);
+  console.log(`   Org ID:  ${org.id}`);
+  console.log(`   CEO:     Sarah Chen (${sarah.id})`);
+  console.log(`   VP Eng:  Marcus Thompson (${marcus.id})`);
+  console.log(`   VP Prod: Priya Patel (${priya.id})`);
+  console.log(`   Eng:     Alex Rivera (${alex.id})`);
+  console.log(`   Eng:     Jamie Kim (${jamie.id})`);
+  console.log(`   PM:      David Park (${david.id})`);
+  console.log(`   PM:      Emma Walsh (${emma.id})`);
 }
 
 main()
   .catch((e) => {
-    console.error('❌ Seed failed:', e);
+    console.error('Seed failed:', e);
     process.exit(1);
   })
   .finally(async () => {
