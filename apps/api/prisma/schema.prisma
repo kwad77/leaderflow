@@ -8,15 +8,16 @@ datasource db {
 }
 
 model Organization {
-  id              String           @id @default(cuid())
-  name            String
-  clerkOrgId      String?          @unique
-  members         Member[]
-  workItems       WorkItem[]
-  integrations    Integration[]
-  automationRules AutomationRule[]
-  settings        Json?
-  createdAt       DateTime         @default(now())
+  id                String            @id @default(cuid())
+  name              String
+  clerkOrgId        String?           @unique
+  members           Member[]
+  workItems         WorkItem[]
+  integrations      Integration[]
+  automationRules   AutomationRule[]
+  webhookDeliveries WebhookDelivery[]
+  settings          Json?
+  createdAt         DateTime          @default(now())
 }
 
 model AutomationRule {
@@ -101,6 +102,22 @@ model Integration {
   enabled    Boolean      @default(true)
   lastSyncAt DateTime?
   createdAt  DateTime     @default(now())
+}
+
+model WebhookDelivery {
+  id          String    @id @default(cuid())
+  orgId       String
+  event       String
+  payload     Json
+  targetUrl   String
+  statusCode  Int?
+  success     Boolean   @default(false)
+  error       String?
+  attempts    Int       @default(1)
+  deliveredAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id])
 }
 
 enum WorkItemType {

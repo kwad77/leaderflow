@@ -33,6 +33,13 @@ function avatarColor(str: string): string {
   return colors[Math.abs(hash) % colors.length];
 }
 
+// Workload badge color thresholds
+function workloadColor(count: number, hasOverdue: boolean): string {
+  if (hasOverdue || count >= 6) return '#ef4444';
+  if (count >= 3) return '#f59e0b';
+  return '#22c55e';
+}
+
 export const OrgNode: React.FC<OrgNodeProps> = ({
   member,
   x,
@@ -51,6 +58,14 @@ export const OrgNode: React.FC<OrgNodeProps> = ({
     (i) => i.type === 'INGRESS' && !['COMPLETED', 'ARCHIVED'].includes(i.status)
   );
 
+  // Workload: items assigned TO this member only
+  const workloadItems = items.filter(
+    (i) => i.toMemberId === member.id && !['COMPLETED', 'ARCHIVED'].includes(i.status)
+  );
+  const workloadCount = workloadItems.length;
+  const hasOverdue = workloadItems.some((i) => i.status === 'OVERDUE');
+  const showWorkloadBadge = workloadCount > 0;
+
   const hasAtRisk = items.some((i) => ['AT_RISK', 'OVERDUE', 'STALE'].includes(i.status));
 
   const bgColor = selected ? '#1e40af' : '#1e293b';
@@ -65,6 +80,18 @@ export const OrgNode: React.FC<OrgNodeProps> = ({
   const AVATAR_R = 20;
   const AVATAR_CX = x + NODE_WIDTH / 2;
   const AVATAR_CY = y + 22;
+
+  // Workload badge: positioned at bottom-right of avatar circle (~45° angle)
+  const BADGE_R = 8;
+  const BADGE_CX = AVATAR_CX + Math.round(AVATAR_R * 0.707) + BADGE_R - 2;
+  const BADGE_CY = AVATAR_CY + Math.round(AVATAR_R * 0.707) + BADGE_R - 2;
+  const badgeColor = showWorkloadBadge ? workloadColor(workloadCount, hasOverdue) : '#475569';
+  const badgeLabel = workloadCount >= 100 ? '99+' : String(workloadCount);
+  // Tooltip text for the badge
+  const overdueCount = workloadItems.filter((i) => i.status === 'OVERDUE').length;
+  const tooltipText = hasOverdue
+    ? `${overdueCount} overdue, ${workloadCount} active`
+    : `${workloadCount} active item${workloadCount !== 1 ? 's' : ''}`;
 
   return (
     <g
@@ -115,6 +142,43 @@ export const OrgNode: React.FC<OrgNodeProps> = ({
       >
         {getInitials(member.name)}
       </text>
+
+      {/* Workload badge — bottom-right of avatar */}
+      {showWorkloadBadge && (
+        <g>
+          {/* Pulse ring for overdue items */}
+          {hasOverdue && (
+            <circle cx={BADGE_CX} cy={BADGE_CY} r={BADGE_R} fill="none" stroke="#ef4444" strokeWidth={1.5} opacity={0}>
+              <animate attributeName="r" from={BADGE_R} to={BADGE_R + 5} dur="1.4s" repeatCount="indefinite" />
+              <animate attributeName="opacity" from="0.6" to="0" dur="1.4s" repeatCount="indefinite" />
+            </circle>
+          )}
+          {/* Badge circle */}
+          <circle
+            cx={BADGE_CX}
+            cy={BADGE_CY}
+            r={BADGE_R}
+            fill={badgeColor}
+            stroke="#0f172a"
+            strokeWidth={1.5}
+          >
+            <title>{tooltipText}</title>
+          </circle>
+          {/* Count text inside badge */}
+          <text
+            x={BADGE_CX}
+            y={BADGE_CY + 0.5}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill="white"
+            fontSize={7}
+            fontWeight="700"
+            style={{ userSelect: 'none', pointerEvents: 'none' }}
+          >
+            {badgeLabel}
+          </text>
+        </g>
+      )}
 
       {/* Name */}
       <text

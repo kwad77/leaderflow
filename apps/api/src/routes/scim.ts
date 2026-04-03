@@ -310,8 +310,9 @@ router.put('/v2/Users/:id', scimAuth, async (req: Request, res: Response, next: 
 
 router.patch('/v2/Users/:id', scimAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const org = await getFirstOrg();
     const member = await prisma.member.findUnique({ where: { id: req.params.id } });
-    if (!member) {
+    if (!member || member.orgId !== org.id) {
       res.setHeader('Content-Type', SCIM_CONTENT_TYPE);
       res.status(404).json({
         schemas: ['urn:ietf:params:scim:api:messages:2.0:Error'],
@@ -366,7 +367,6 @@ router.patch('/v2/Users/:id', scimAuth, async (req: Request, res: Response, next
       log.info({ memberId: member.id }, 'SCIM deactivating (deleting) user via PATCH active=false');
       await prisma.member.delete({ where: { id: member.id } });
 
-      const org = await getFirstOrg();
       const updatedTree = await getOrgTree(org.id);
       emitToOrg(org.id, { type: 'ORG_UPDATED', payload: updatedTree, timestamp: new Date().toISOString() });
 
@@ -381,7 +381,6 @@ router.patch('/v2/Users/:id', scimAuth, async (req: Request, res: Response, next
 
     log.info({ memberId: updated.id, patch }, 'SCIM patch user');
 
-    const org = await getFirstOrg();
     const updatedTree = await getOrgTree(org.id);
     emitToOrg(org.id, { type: 'ORG_UPDATED', payload: updatedTree, timestamp: new Date().toISOString() });
 
@@ -396,8 +395,9 @@ router.patch('/v2/Users/:id', scimAuth, async (req: Request, res: Response, next
 
 router.delete('/v2/Users/:id', scimAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const org = await getFirstOrg();
     const member = await prisma.member.findUnique({ where: { id: req.params.id } });
-    if (!member) {
+    if (!member || member.orgId !== org.id) {
       res.setHeader('Content-Type', SCIM_CONTENT_TYPE);
       res.status(404).json({
         schemas: ['urn:ietf:params:scim:api:messages:2.0:Error'],
@@ -411,7 +411,6 @@ router.delete('/v2/Users/:id', scimAuth, async (req: Request, res: Response, nex
 
     log.info({ memberId: req.params.id }, 'SCIM deleted user');
 
-    const org = await getFirstOrg();
     const updatedTree = await getOrgTree(org.id);
     emitToOrg(org.id, { type: 'ORG_UPDATED', payload: updatedTree, timestamp: new Date().toISOString() });
 
