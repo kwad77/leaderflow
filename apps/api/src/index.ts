@@ -26,6 +26,7 @@ import automationRoutes from './routes/automation';
 import authRouter from './routes/auth';
 import importRouter from './routes/import';
 import scimRouter from './routes/scim';
+import notificationsRouter from './routes/notifications';
 
 const app = express();
 const httpServer = createServer(app);
@@ -84,6 +85,7 @@ app.use('/api/webhooks', webhooksRoutes);
 app.use('/api/automation', automationRoutes);
 app.use('/api/auth', authRouter);
 app.use('/api/scim', scimRouter);
+app.use('/api/notifications', notificationsRouter);
 
 // ─── Error handling ───────────────────────────────────────────────────────────
 

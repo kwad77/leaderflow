@@ -10,6 +10,7 @@ export const triageQueue     = new Queue('triage',     { connection: redisConnec
 export const followupQueue   = new Queue('followup',   { connection: redisConnection });
 export const escalationQueue = new Queue('escalation', { connection: redisConnection });
 export const automationQueue = new Queue('automation', { connection: redisConnection });
+export const digestQueue     = new Queue('digest',     { connection: redisConnection });
 
 export function createWorker(queueName: string, processor: Processor) {
   return new Worker(queueName, processor, {
