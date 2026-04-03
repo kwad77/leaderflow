@@ -24,6 +24,8 @@ import integrationsRoutes from './routes/integrations';
 import webhooksRoutes from './routes/webhooks';
 import automationRoutes from './routes/automation';
 import authRouter from './routes/auth';
+import importRouter from './routes/import';
+import scimRouter from './routes/scim';
 
 const app = express();
 const httpServer = createServer(app);
@@ -53,6 +55,7 @@ app.use('/api/webhooks', express.raw({ type: '*/*' }), (req, _res, next) => {
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(express.text({ type: 'text/csv' }));
 
 // Clerk middleware (attaches auth state; no-op if keys not set)
 app.use(withClerk);
@@ -72,6 +75,7 @@ app.use('/api/health', healthRouter);
 
 // ─── API Routes ───────────────────────────────────────────────────────────────
 
+app.use('/api/import', importRouter);
 app.use('/api/org', orgRoutes);
 app.use('/api/items', itemsRoutes);
 app.use('/api/briefing', briefingRoutes);
@@ -79,6 +83,7 @@ app.use('/api/integrations', integrationsRoutes);
 app.use('/api/webhooks', webhooksRoutes);
 app.use('/api/automation', automationRoutes);
 app.use('/api/auth', authRouter);
+app.use('/api/scim', scimRouter);
 
 // ─── Error handling ───────────────────────────────────────────────────────────
 

@@ -83,6 +83,21 @@ export async function createItem(body: CreateWorkItemBody): Promise<WorkItem> {
   });
 }
 
+export async function createWorkItem(data: {
+  title: string;
+  type: string;
+  priority: string;
+  toMemberId: string;
+  fromMemberId?: string;
+  description?: string;
+  dueAt?: string;
+}): Promise<WorkItem> {
+  return request('/items', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
 export async function delegateItem(id: string, body: DelegateItemBody): Promise<WorkItem> {
   return request(`/items/${id}/delegate`, {
     method: 'POST',

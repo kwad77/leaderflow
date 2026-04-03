@@ -51,22 +51,56 @@ export interface ListItemsFilter {
   status?: WorkItemStatus;
   toMemberId?: string;
   fromMemberId?: string;
+  cursor?: string;
+  limit?: number;
 }
 
-export async function listWorkItems(filter: ListItemsFilter) {
-  const items = await prisma.workItem.findMany({
-    where: {
-      orgId: filter.orgId,
-      ...(filter.type && { type: filter.type }),
-      ...(filter.status && { status: filter.status }),
-      ...(filter.toMemberId && { toMemberId: filter.toMemberId }),
-      ...(filter.fromMemberId && { fromMemberId: filter.fromMemberId }),
-    },
-    include: workItemInclude,
-    orderBy: { createdAt: 'asc' },
-  });
+export interface ListItemsResult {
+  items: ReturnType<typeof serializeItem>[];
+  total: number;
+  nextCursor: string | null;
+  hasMore: boolean;
+}
 
-  return items.map(serializeItem);
+export async function listWorkItems(filter: ListItemsFilter): Promise<ListItemsResult> {
+  const limit = Math.min(filter.limit ?? 50, 200);
+  const cursor = filter.cursor;
+
+  const where = {
+    orgId: filter.orgId,
+    ...(filter.type && { type: filter.type }),
+    ...(filter.status && { status: filter.status }),
+    ...(filter.toMemberId && { toMemberId: filter.toMemberId }),
+    ...(filter.fromMemberId && { fromMemberId: filter.fromMemberId }),
+  };
+
+  const [rawItems, total] = await Promise.all([
+    prisma.workItem.findMany({
+      where,
+      include: workItemInclude,
+      orderBy: { createdAt: 'asc' },
+      take: limit + 1,
+      ...(cursor && {
+        cursor: { id: cursor },
+        skip: 1,
+      }),
+    }),
+    prisma.workItem.count({ where }),
+  ]);
+
+  const hasMore = rawItems.length > limit;
+  if (hasMore) {
+    rawItems.pop();
+  }
+
+  const nextCursor = hasMore ? rawItems[rawItems.length - 1].id : null;
+
+  return {
+    items: rawItems.map(serializeItem),
+    total,
+    nextCursor,
+    hasMore,
+  };
 }
 
 export async function getWorkItemById(itemId: string) {

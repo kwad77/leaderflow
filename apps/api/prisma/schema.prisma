@@ -47,6 +47,7 @@ model Member {
   directReports   Member[]     @relation("ReportsTo")
   assignedItems   WorkItem[]   @relation("AssignedTo")
   originatedItems WorkItem[]   @relation("OriginatedFrom")
+  metadata        Json?
   createdAt       DateTime     @default(now())
 }
 

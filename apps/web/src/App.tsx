@@ -5,10 +5,13 @@ import { NodeDetail } from './components/NodeDetail';
 import { TriageModal } from './components/Triage';
 import { MetricsDashboard } from './components/Metrics';
 import { SettingsPanel } from './components/Settings';
+import { SearchOverlay } from './components/Search';
+import { OnboardingWizard } from './components/Onboarding';
 import { useAppStore } from './stores/appStore';
 import { useWorkItems } from './hooks/useWorkItems';
 import { useRealtime } from './hooks/useRealtime';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { fetchOrgTree } from './lib/api';
 
 function flattenTree(node: any): any[] {
@@ -26,13 +29,17 @@ const AppContent: React.FC = () => {
     error,
     metricsOpen,
     settingsOpen,
+    searchOpen,
     setOrg,
     setError,
     setMetricsOpen,
     setSettingsOpen,
+    setSearchOpen,
     setIsOnline,
     setCurrentUserRole,
   } = useAppStore();
+
+  useKeyboardShortcuts();
 
   const isOnline = useOnlineStatus();
 
@@ -124,6 +131,10 @@ const AppContent: React.FC = () => {
     );
   }
 
+  if (!loading && !error && !orgTree) {
+    return <OnboardingWizard onComplete={() => window.location.reload()} />;
+  }
+
   if (!orgTree) return null;
 
   const allMembers = flattenTree(orgTree);
@@ -203,6 +214,40 @@ const AppContent: React.FC = () => {
 
         {/* Weekly Review button + Settings gear */}
         <div style={{ flex: 1 }} />
+
+        {/* Search button */}
+        <button
+          onClick={() => setSearchOpen(true)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '5px 10px',
+            background: searchOpen ? '#1e40af' : '#1e293b',
+            border: `1px solid ${searchOpen ? '#3b82f6' : '#334155'}`,
+            borderRadius: 6,
+            color: searchOpen ? '#93c5fd' : '#94a3b8',
+            fontSize: 11,
+            fontWeight: 600,
+            cursor: 'pointer',
+            letterSpacing: '0.02em',
+          }}
+          aria-label="Search (Cmd+K)"
+          title="Search members and work items (Cmd+K)"
+        >
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 20 20"
+            fill="none"
+            style={{ flexShrink: 0 }}
+          >
+            <circle cx="9" cy="9" r="6" stroke="currentColor" strokeWidth="2" />
+            <path d="M13.5 13.5L17 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          <span style={{ color: '#475569', fontSize: 10 }}>⌘K</span>
+        </button>
+
         <button
           onClick={() => setMetricsOpen(true)}
           style={{
@@ -283,6 +328,9 @@ const AppContent: React.FC = () => {
 
       {/* Settings panel */}
       {settingsOpen && <SettingsPanel />}
+
+      {/* Search overlay */}
+      <SearchOverlay />
     </div>
   );
 };

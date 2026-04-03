@@ -1,8 +1,9 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { FilterCard } from './FilterCard';
 import { WorkItemRow } from './WorkItemRow';
 import { useAppStore } from '../../stores/appStore';
 import { useWorkItems } from '../../hooks/useWorkItems';
+import { CreateItemModal } from '../CreateItem';
 import type { WorkItem } from '@leaderflow/shared';
 
 export const FlowPanel: React.FC = () => {
@@ -26,6 +27,7 @@ export const FlowPanel: React.FC = () => {
   }, [allItems, currentUserRole, currentUser]);
   const { refresh } = useWorkItems();
   const sheetRef = useRef<HTMLDivElement>(null);
+  const [showCreate, setShowCreate] = useState(false);
 
   const handleFilterClick = (filter: 'ingress' | 'escalations' | 'atRisk') => {
     if (activeFilter === filter && filterPanelOpen) {
@@ -113,21 +115,45 @@ export const FlowPanel: React.FC = () => {
                 {' '}
                 <span style={{ color: '#64748b' }}>({filteredItems.length})</span>
               </span>
-              <button
-                onClick={closeFilter}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#64748b',
-                  fontSize: 18,
-                  cursor: 'pointer',
-                  lineHeight: 1,
-                  padding: '0 4px',
-                }}
-                aria-label="Close panel"
-              >
-                ×
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button
+                  type="button"
+                  onClick={() => setShowCreate(true)}
+                  style={{
+                    width: 28,
+                    height: 28,
+                    background: '#1e293b',
+                    border: '1px solid #334155',
+                    borderRadius: 6,
+                    color: '#94a3b8',
+                    fontSize: 18,
+                    lineHeight: 1,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  aria-label="Create work item"
+                  title="Create work item"
+                >
+                  +
+                </button>
+                <button
+                  onClick={closeFilter}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#64748b',
+                    fontSize: 18,
+                    cursor: 'pointer',
+                    lineHeight: 1,
+                    padding: '0 4px',
+                  }}
+                  aria-label="Close panel"
+                >
+                  ×
+                </button>
+              </div>
             </div>
 
             {/* Item list */}
@@ -139,15 +165,12 @@ export const FlowPanel: React.FC = () => {
               }}
             >
               {filteredItems.length === 0 ? (
-                <div
-                  style={{
-                    textAlign: 'center',
-                    color: '#475569',
-                    fontSize: 13,
-                    marginTop: 40,
-                  }}
-                >
-                  No items in this category
+                <div style={{ padding: '32px 16px', textAlign: 'center', color: '#475569', fontSize: 13 }}>
+                  <div style={{ fontSize: 24, marginBottom: 8 }}>✦</div>
+                  <div>No items match this filter.</div>
+                  {items.length === 0 && (
+                    <div style={{ marginTop: 4, fontSize: 12 }}>Your queue is clear.</div>
+                  )}
                 </div>
               ) : (
                 filteredItems.map((item) => (
@@ -171,8 +194,8 @@ export const FlowPanel: React.FC = () => {
           gap: 8,
         }}
       >
-        {/* Filter cards */}
-        <div style={{ display: 'flex', gap: 8 }}>
+        {/* Filter cards + create button */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
           <FilterCard
             type="ingress"
             count={ingressCount}
@@ -191,6 +214,30 @@ export const FlowPanel: React.FC = () => {
             active={activeFilter === 'atRisk'}
             onClick={() => handleFilterClick('atRisk')}
           />
+          <button
+            type="button"
+            onClick={() => setShowCreate(true)}
+            style={{
+              width: 28,
+              height: 28,
+              flexShrink: 0,
+              alignSelf: 'center',
+              background: '#1e293b',
+              border: '1px solid #334155',
+              borderRadius: 6,
+              color: '#94a3b8',
+              fontSize: 18,
+              lineHeight: 1,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            aria-label="Create work item"
+            title="Create work item"
+          >
+            +
+          </button>
         </div>
 
         {/* Swipe indicator */}
@@ -217,6 +264,9 @@ export const FlowPanel: React.FC = () => {
           50% { opacity: 0.4; }
         }
       `}</style>
+
+      {/* Create item modal */}
+      {showCreate && <CreateItemModal onClose={() => setShowCreate(false)} />}
     </div>
   );
 };
