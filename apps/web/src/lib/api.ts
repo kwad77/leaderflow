@@ -198,6 +198,36 @@ export async function fetchWeeklyBriefing(): Promise<WeeklyBriefing> {
   return request('/briefing/weekly');
 }
 
+// ─── Member Stats & Load Balance ─────────────────────────────────────────────
+
+export interface MemberStats {
+  memberId: string;
+  activeCount: number;
+  overdueCount: number;
+  completedLast30d: number;
+  avgCompletionHours: number;
+  delegatedOut: number;
+  escalatedUp: number;
+  receivedFromCount: number;
+  topSources: Array<{ memberId: string; name: string; count: number }>;
+  loadScore: number;
+}
+
+export async function fetchMemberStats(memberId: string): Promise<MemberStats> {
+  return request(`/org/members/${memberId}/stats`);
+}
+
+export async function fetchLoadBalance(): Promise<{
+  members: Array<{ memberId: string; name: string; activeCount: number; loadScore: number }>;
+  suggestions: Array<{
+    message: string;
+    overloadedMemberId: string;
+    targetMemberId: string;
+  }>;
+}> {
+  return request('/org/load-balance');
+}
+
 // ─── Automation ───────────────────────────────────────────────────────────────
 
 export interface AutomationRule {

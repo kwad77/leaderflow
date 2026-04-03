@@ -1,9 +1,28 @@
-import React, { useState, useRef, KeyboardEvent } from 'react';
+import React, { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { useAppStore } from '../../stores/appStore';
 import { WorkItemRow } from '../FlowPanel/WorkItemRow';
 import { useWorkItems } from '../../hooks/useWorkItems';
 import type { OrgMember, WorkItem, WorkItemUpdate } from '@leaderflow/shared';
-import { addItemComment, relativeTime } from '../../lib/api';
+import { addItemComment, relativeTime, fetchMemberStats } from '../../lib/api';
+import type { MemberStats } from '../../lib/api';
+
+const IS_DEMO = import.meta.env.VITE_DEMO_MODE === 'true';
+
+const DEMO_STATS: MemberStats = {
+  memberId: 'demo',
+  activeCount: 5,
+  overdueCount: 1,
+  completedLast30d: 12,
+  avgCompletionHours: 18.5,
+  delegatedOut: 8,
+  escalatedUp: 2,
+  receivedFromCount: 3,
+  topSources: [
+    { memberId: 'demo-src-1', name: 'Sarah Chen', count: 4 },
+    { memberId: 'demo-src-2', name: 'Marcus Webb', count: 2 },
+  ],
+  loadScore: 72,
+};
 
 interface NodeDetailProps {
   member: OrgMember;
@@ -246,6 +265,33 @@ export const NodeDetail: React.FC<NodeDetailProps> = ({ member, items }) => {
   // Track locally added comments so we can reflect them without a full refresh
   const [localUpdates, setLocalUpdates] = useState<Record<string, WorkItemUpdate[]>>({});
 
+  // Member stats
+  const [memberStats, setMemberStats] = useState<MemberStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+
+  useEffect(() => {
+    if (IS_DEMO) {
+      setMemberStats({ ...DEMO_STATS, memberId: member.id });
+      return;
+    }
+    let cancelled = false;
+    setMemberStats(null);
+    setStatsLoading(true);
+    fetchMemberStats(member.id)
+      .then((stats) => {
+        if (!cancelled) setMemberStats(stats);
+      })
+      .catch(() => {
+        if (!cancelled) setMemberStats(null);
+      })
+      .finally(() => {
+        if (!cancelled) setStatsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [member.id]);
+
   const activeItems = items.filter(
     (i) =>
       (i.toMemberId === member.id || i.fromMemberId === member.id) &&
@@ -479,6 +525,114 @@ export const NodeDetail: React.FC<NodeDetailProps> = ({ member, items }) => {
               );
             })
         )}
+      </div>
+
+      {/* Stats section */}
+      <div
+        style={{
+          borderTop: '1px solid #1e293b',
+          padding: '10px 14px 12px',
+          flexShrink: 0,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 10,
+            fontWeight: 600,
+            color: '#475569',
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            marginBottom: 8,
+          }}
+        >
+          Stats (30d)
+        </div>
+
+        {statsLoading && (
+          <div style={{ fontSize: 11, color: '#475569' }}>Loading…</div>
+        )}
+
+        {!statsLoading && memberStats && (() => {
+          const score = memberStats.loadScore;
+          const barColor =
+            score <= 40 ? '#22c55e' : score <= 70 ? '#f59e0b' : '#ef4444';
+
+          return (
+            <>
+              {/* Row 1: active / overdue / completed */}
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 6,
+                  marginBottom: 6,
+                }}
+              >
+                {[
+                  { label: 'Active', value: memberStats.activeCount, color: '#60a5fa' },
+                  { label: 'Overdue', value: memberStats.overdueCount, color: '#ef4444' },
+                  { label: 'Completed (30d)', value: memberStats.completedLast30d, color: '#22c55e' },
+                ].map(({ label, value, color }) => (
+                  <div
+                    key={label}
+                    style={{
+                      flex: 1,
+                      background: '#1e293b',
+                      borderRadius: 6,
+                      padding: '5px 4px',
+                      textAlign: 'center',
+                    }}
+                  >
+                    <div style={{ fontSize: 14, fontWeight: 700, color }}>{value}</div>
+                    <div style={{ fontSize: 8, color: '#64748b', marginTop: 1, lineHeight: 1.2 }}>{label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Row 2: avg completion + load score label */}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: 5,
+                }}
+              >
+                <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                  Avg completion:{' '}
+                  <span style={{ color: '#f1f5f9', fontWeight: 600 }}>
+                    {memberStats.avgCompletionHours}h
+                  </span>
+                </span>
+                <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                  Load:{' '}
+                  <span style={{ color: barColor, fontWeight: 700 }}>
+                    {score}/100
+                  </span>
+                </span>
+              </div>
+
+              {/* Load score bar */}
+              <div
+                style={{
+                  height: 4,
+                  borderRadius: 2,
+                  background: '#1e293b',
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    height: '100%',
+                    width: `${score}%`,
+                    background: barColor,
+                    borderRadius: 2,
+                    transition: 'width 0.4s ease',
+                  }}
+                />
+              </div>
+            </>
+          );
+        })()}
       </div>
     </div>
   );

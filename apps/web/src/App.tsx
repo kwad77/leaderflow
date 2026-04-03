@@ -156,6 +156,7 @@ const AppContent: React.FC = () => {
             background: '#b45309',
             color: '#fef3c7',
             padding: '6px 16px',
+            paddingBottom: 'env(safe-area-inset-bottom, 0px)',
             fontSize: 12,
             textAlign: 'center',
             display: 'flex',
@@ -183,6 +184,7 @@ const AppContent: React.FC = () => {
           display: 'flex',
           alignItems: 'center',
           padding: '0 16px',
+          paddingTop: 'calc(0px + var(--safe-top, 0px))',
           zIndex: 50,
           gap: 10,
         }}

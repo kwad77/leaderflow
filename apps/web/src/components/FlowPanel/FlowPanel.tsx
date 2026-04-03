@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { FilterCard } from './FilterCard';
 import { WorkItemRow } from './WorkItemRow';
 import { useAppStore } from '../../stores/appStore';
@@ -40,6 +40,18 @@ export const FlowPanel: React.FC = () => {
   const { refresh } = useWorkItems();
   const sheetRef = useRef<HTMLDivElement>(null);
   const [showCreate, setShowCreate] = useState(false);
+
+  // Mobile height: use 60% of viewport height on narrow screens
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  const [viewportHeight, setViewportHeight] = useState(() => window.innerHeight);
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+      setViewportHeight(window.innerHeight);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Multi-select state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -138,7 +150,11 @@ export const FlowPanel: React.FC = () => {
   const escalationsCount = briefing?.totals.escalations ?? 0;
   const atRiskCount = briefing?.totals.atRisk ?? 0;
 
-  const PANEL_HEIGHT = filterPanelOpen ? 320 : 0;
+  const PANEL_HEIGHT = filterPanelOpen
+    ? isMobile
+      ? Math.round(viewportHeight * 0.6)
+      : 320
+    : 0;
   const BOTTOM_BAR_HEIGHT = 148;
 
   return (

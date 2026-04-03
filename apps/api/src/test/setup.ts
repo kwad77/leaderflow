@@ -21,6 +21,7 @@ vi.mock('../lib/prisma', () => ({
       upsert: vi.fn(),
       update: vi.fn(),
       updateMany: vi.fn(),
+      delete: vi.fn(),
     },
     organization: {
       findUnique: vi.fn(),

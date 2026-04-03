@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import './styles/global.css';
 import App from './App';
 
 const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';

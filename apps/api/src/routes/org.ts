@@ -164,6 +164,194 @@ router.delete('/members/:id', protect, async (req: Request, res: Response, next:
   }
 });
 
+/**
+ * GET /api/org/members/:id/stats
+ * Returns workload statistics for a member over the last 30 days.
+ */
+router.get('/members/:id/stats', protect, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const memberId = req.params.id;
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    // Verify member exists
+    const member = await prisma.member.findUnique({ where: { id: memberId } });
+    if (!member) {
+      throw createError('Member not found', 404);
+    }
+
+    // activeCount: items assigned to member, not completed/archived
+    const activeCount = await prisma.workItem.count({
+      where: {
+        toMemberId: memberId,
+        status: { notIn: ['COMPLETED', 'ARCHIVED'] },
+      },
+    });
+
+    // overdueCount: items assigned to member with OVERDUE status
+    const overdueCount = await prisma.workItem.count({
+      where: {
+        toMemberId: memberId,
+        status: 'OVERDUE',
+      },
+    });
+
+    // completedLast30d + avgCompletionHours
+    const completedItems = await prisma.workItem.findMany({
+      where: {
+        toMemberId: memberId,
+        status: 'COMPLETED',
+        completedAt: { gte: thirtyDaysAgo },
+      },
+      select: { createdAt: true, completedAt: true },
+    });
+
+    const completedLast30d = completedItems.length;
+    let avgCompletionHours = 0;
+    if (completedLast30d > 0) {
+      const totalHours = completedItems.reduce((sum, item) => {
+        const completed = item.completedAt ? item.completedAt.getTime() : Date.now();
+        const diffHours = (completed - item.createdAt.getTime()) / (1000 * 60 * 60);
+        return sum + diffHours;
+      }, 0);
+      avgCompletionHours = Math.round((totalHours / completedLast30d) * 10) / 10;
+    }
+
+    // delegatedOut: items where fromMemberId = id AND type = DELEGATION (last 30d)
+    const delegatedOut = await prisma.workItem.count({
+      where: {
+        fromMemberId: memberId,
+        type: 'DELEGATION',
+        createdAt: { gte: thirtyDaysAgo },
+      },
+    });
+
+    // escalatedUp: items where fromMemberId = id AND type = ESCALATION (last 30d)
+    const escalatedUp = await prisma.workItem.count({
+      where: {
+        fromMemberId: memberId,
+        type: 'ESCALATION',
+        createdAt: { gte: thirtyDaysAgo },
+      },
+    });
+
+    // receivedFromCount + topSources: items assigned to member (last 30d), group by fromMemberId
+    const receivedItems = await prisma.workItem.findMany({
+      where: {
+        toMemberId: memberId,
+        createdAt: { gte: thirtyDaysAgo },
+        fromMemberId: { not: null },
+      },
+      select: { fromMemberId: true },
+    });
+
+    // Build source counts
+    const sourceCounts = new Map<string, number>();
+    for (const item of receivedItems) {
+      if (item.fromMemberId) {
+        sourceCounts.set(item.fromMemberId, (sourceCounts.get(item.fromMemberId) ?? 0) + 1);
+      }
+    }
+    const receivedFromCount = sourceCounts.size;
+
+    // Top 3 sources by count
+    const topSourceIds = [...sourceCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([id, count]) => ({ id, count }));
+
+    const topSourceMembers = topSourceIds.length > 0
+      ? await prisma.member.findMany({
+          where: { id: { in: topSourceIds.map((s) => s.id) } },
+          select: { id: true, name: true },
+        })
+      : [];
+
+    const topSources = topSourceIds.map(({ id, count }) => {
+      const m = topSourceMembers.find((mem) => mem.id === id);
+      return { memberId: id, name: m?.name ?? 'Unknown', count };
+    });
+
+    // loadScore: min(100, (activeCount * 10) + (overdueCount * 20))
+    const loadScore = Math.min(100, activeCount * 10 + overdueCount * 20);
+
+    res.json({
+      memberId,
+      activeCount,
+      overdueCount,
+      completedLast30d,
+      avgCompletionHours,
+      delegatedOut,
+      escalatedUp,
+      receivedFromCount,
+      topSources,
+      loadScore,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/org/load-balance
+ * Returns all members with load scores and rebalancing suggestions.
+ */
+router.get('/load-balance', protect, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const org = await orgService.getFirstOrg();
+    const allMembers = await orgService.listMembers(org.id);
+
+    // Compute activeCount and loadScore for each member
+    const memberStats = await Promise.all(
+      allMembers.map(async (m) => {
+        const activeCount = await prisma.workItem.count({
+          where: {
+            toMemberId: m.id,
+            status: { notIn: ['COMPLETED', 'ARCHIVED'] },
+          },
+        });
+        const overdueCount = await prisma.workItem.count({
+          where: {
+            toMemberId: m.id,
+            status: 'OVERDUE',
+          },
+        });
+        const loadScore = Math.min(100, activeCount * 10 + overdueCount * 20);
+        return { memberId: m.id, name: m.name, activeCount, loadScore };
+      })
+    );
+
+    // Generate suggestions: overloaded (> 70) paired with low-load peers (< 30)
+    const overloaded = memberStats.filter((m) => m.loadScore > 70);
+    const underloaded = memberStats.filter((m) => m.loadScore < 30);
+
+    const suggestions: Array<{
+      message: string;
+      overloadedMemberId: string;
+      targetMemberId: string;
+    }> = [];
+
+    for (const heavy of overloaded) {
+      if (suggestions.length >= 3) break;
+      const target = underloaded.find(
+        (u) => u.memberId !== heavy.memberId
+      );
+      if (!target) continue;
+
+      const excess = heavy.activeCount - Math.round(heavy.activeCount / 2);
+      const delegateSuggest = Math.min(Math.max(2, excess), 3);
+      suggestions.push({
+        message: `${heavy.name} has ${heavy.activeCount} active items (score: ${heavy.loadScore}). Consider delegating ${delegateSuggest}–${delegateSuggest + 1} to ${target.name} (score: ${target.loadScore}).`,
+        overloadedMemberId: heavy.memberId,
+        targetMemberId: target.memberId,
+      });
+    }
+
+    res.json({ members: memberStats, suggestions });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─── Default org settings ────────────────────────────────────────────────────
 
 const DEFAULT_SETTINGS = {
