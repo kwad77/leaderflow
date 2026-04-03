@@ -1,0 +1,17 @@
+node_modules
+dist
+.turbo
+.env
+*.local
+
+# Build outputs
+apps/web/dist
+apps/api/dist
+
+# Internal planning docs
+PLAN.md
+*.mjs
+
+# OS
+.DS_Store
+Thumbs.db

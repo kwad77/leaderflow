@@ -1,0 +1,128 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id              String           @id @default(cuid())
+  name            String
+  clerkOrgId      String?          @unique
+  members         Member[]
+  workItems       WorkItem[]
+  integrations    Integration[]
+  automationRules AutomationRule[]
+  settings        Json?
+  createdAt       DateTime         @default(now())
+}
+
+model AutomationRule {
+  id          String       @id @default(cuid())
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id])
+  name        String
+  description String?
+  type        String
+  condition   Json
+  action      Json
+  enabled     Boolean      @default(true)
+  runCount    Int          @default(0)
+  lastRunAt   DateTime?
+  createdAt   DateTime     @default(now())
+}
+
+model Member {
+  id              String       @id @default(cuid())
+  userId          String?
+  name            String
+  email           String
+  role            String
+  orgId           String
+  org             Organization @relation(fields: [orgId], references: [id])
+  parentId        String?
+  parent          Member?      @relation("ReportsTo", fields: [parentId], references: [id])
+  directReports   Member[]     @relation("ReportsTo")
+  assignedItems   WorkItem[]   @relation("AssignedTo")
+  originatedItems WorkItem[]   @relation("OriginatedFrom")
+  createdAt       DateTime     @default(now())
+}
+
+model WorkItem {
+  id                  String           @id @default(cuid())
+  title               String
+  description         String?
+  type                WorkItemType
+  status              WorkItemStatus
+  priority            Priority
+  source              String?
+  sourceRef           String?
+  orgId               String
+  org                 Organization     @relation(fields: [orgId], references: [id])
+  fromMemberId        String?
+  from                Member?          @relation("OriginatedFrom", fields: [fromMemberId], references: [id])
+  fromExternal        String?
+  toMemberId          String
+  to                  Member           @relation("AssignedTo", fields: [toMemberId], references: [id])
+  dueAt               DateTime?
+  acknowledgedAt      DateTime?
+  completedAt         DateTime?
+  aiSuggestedOwner    String?
+  aiSuggestedPriority String?
+  aiRationale         String?
+  aiAutomatable       Boolean          @default(false)
+  aiAutomationNotes   String?
+  updates             WorkItemUpdate[]
+  tags                String[]
+  metadata            Json?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+}
+
+model WorkItemUpdate {
+  id           String   @id @default(cuid())
+  itemId       String
+  item         WorkItem @relation(fields: [itemId], references: [id])
+  authorId     String?
+  note         String
+  statusChange String?
+  createdAt    DateTime @default(now())
+}
+
+model Integration {
+  id         String       @id @default(cuid())
+  orgId      String
+  org        Organization @relation(fields: [orgId], references: [id])
+  type       String
+  config     Json
+  enabled    Boolean      @default(true)
+  lastSyncAt DateTime?
+  createdAt  DateTime     @default(now())
+}
+
+enum WorkItemType {
+  INGRESS
+  DELEGATION
+  ESCALATION
+}
+
+enum WorkItemStatus {
+  PENDING
+  ACKNOWLEDGED
+  IN_PROGRESS
+  ON_TRACK
+  AT_RISK
+  STALE
+  OVERDUE
+  COMPLETED
+  ARCHIVED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
