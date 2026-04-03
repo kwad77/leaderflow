@@ -1,7 +1,7 @@
 import { Job } from 'bullmq';
 import { prisma } from '../../lib/prisma';
 import { emitToOrg } from '../../lib/socket';
-import { anthropic } from '../../lib/anthropic';
+import { ai } from '../../lib/ai';
 
 const workItemInclude = {
   from: {
@@ -97,13 +97,7 @@ Based on the work item type, description, and delegation patterns, suggest:
 Return ONLY this JSON structure, no other text, no markdown code blocks: {"priority":"...","suggestedOwnerId":"...","rationale":"..."}`;
 
   try {
-    const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 256,
-      messages: [{ role: 'user', content: prompt }],
-    });
-
-    const text = response.content[0].type === 'text' ? response.content[0].text.trim() : '';
+    const text = await ai.complete(prompt, 'fast', 256);
     const parsed = JSON.parse(text);
 
     await prisma.workItem.update({

@@ -1,6 +1,6 @@
 import { Job } from 'bullmq';
 import { prisma } from '../../lib/prisma';
-import { anthropic } from '../../lib/anthropic';
+import { ai } from '../../lib/ai';
 import * as orgService from '../../services/org.service';
 
 export async function processAutomationJob(_job: Job): Promise<void> {
@@ -57,14 +57,8 @@ Return ONLY a JSON array, no other text, no markdown code blocks: [{"pattern":".
   let opportunities: any[] = [];
 
   try {
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5',
-      max_tokens: 1024,
-      messages: [{ role: 'user', content: prompt }],
-    });
-
-    const text = response.content[0].type === 'text' ? response.content[0].text.trim() : '[]';
-    opportunities = JSON.parse(text);
+    const text = await ai.complete(prompt, 'smart', 1024);
+    opportunities = JSON.parse(text || '[]');
   } catch (err) {
     console.error('[automation] AI analysis failed:', err instanceof Error ? err.message : err);
     return;

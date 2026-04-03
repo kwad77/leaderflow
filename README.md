@@ -1,97 +1,236 @@
+<div align="center">
+
+```
+        ┌─────────────────────────────────────────────────────┐
+        │                                                     │
+        │          ◉ Sarah Chen  ·  CEO                       │
+        │         ╱ ↑            ╲                            │
+        │   ↑↑↑ ╱   ╲ red         ╲ ↓↓↓                     │
+        │      ◉      ◉            ◉ ·· blue                  │
+        │   Marcus  Priya        Jordan                       │
+        │     ╱              ╲                                │
+        │    ◉ ·· orange       ◉                              │
+        │  Jamie             Emma                             │
+        │                                                     │
+        │  ↑ escalation   ↓ delegation   · new ingress        │
+        │                                                     │
+        └─────────────────────────────────────────────────────┘
+```
+
 # LeaderFlow
 
-> **The org chart IS the interface.** Work items flow through your hierarchy as animated particles — leaders see the whole picture at a glance, triage what matters, and process their day in one focused ritual.
+**The org chart is the interface. Work flows through it.**
+
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-kwad77.github.io%2Fleaderflow-6366f1?style=for-the-badge&logo=github)](https://kwad77.github.io/leaderflow/)
+[![Deploy Demo](https://github.com/kwad77/leaderflow/actions/workflows/demo.yml/badge.svg)](https://github.com/kwad77/leaderflow/actions/workflows/demo.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-slate?style=flat-square)](LICENSE)
+
+</div>
 
 ---
 
-## The Problem
+## The Problem with Leadership Tools
 
-Leaders fail in two ways:
+Every leadership tool in existence makes the same mistake: it puts work in a list.
 
-1. **They do the work themselves** instead of delegating — becoming the bottleneck
-2. **Escalations fall through the cracks** — no one is watching the edges of the hierarchy
+Lists are flat. Organizations are not. When Marcus escalates something to Sarah, and Sarah needs to decide whether to handle it herself or push it back down to Priya — that decision happens *in the context of the hierarchy*. A list destroys that context.
 
-LeaderFlow makes both failure modes *visible*. Every delegation, escalation, and ingress item physically flows along the org chart as a particle. Hot spots glow. You can't unsee a bottleneck when it's a cluster of red particles pulsing at someone's node.
+Leaders fail in exactly two ways:
+- **They become the bottleneck** — doing work themselves instead of delegating because they can't *see* who has capacity
+- **Escalations fall through the cracks** — no one is watching the edges between people
+
+LeaderFlow makes both failure modes impossible to miss. Work items are animated particles flowing along the org chart edges. Escalations travel upward in red. Delegations travel downward in blue. New ingress arrives in orange. You can't miss a bottleneck when it's a cluster of red particles pulsing at one node.
+
+The daily ritual: open the app, see where work is stuck, process your hot spots, close it.
+
+---
+
+## Try It Now
+
+**No Docker. No database. No API keys.**
+
+```bash
+git clone https://github.com/kwad77/leaderflow.git
+cd leaderflow && pnpm install
+pnpm --filter web demo
+```
+
+Or just visit the **[live demo →](https://kwad77.github.io/leaderflow/)**
+
+The demo loads a fully-populated Acme Corp with 7 members, 11 active work items across every status and type, animated particles on every org tree edge, and a guided tour that walks you through the whole system.
+
+---
+
+## Full Setup
+
+### Prerequisites
+- Node.js 20+, pnpm 9+, Docker
+
+### 1. Clone and install
+```bash
+git clone https://github.com/kwad77/leaderflow.git
+cd leaderflow
+pnpm install
+```
+
+### 2. Configure
+```bash
+cp .env.example .env
+```
+
+Minimum required:
+```env
+DATABASE_URL=postgresql://leaderflow:leaderflow@localhost:5432/leaderflow
+REDIS_URL=redis://localhost:6379
+AI_PROVIDER=anthropic
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+### 3. Start infrastructure
+```bash
+docker-compose up -d
+```
+
+### 4. Initialize database
+```bash
+pnpm --filter api db:migrate
+pnpm --filter api db:seed   # seeds Acme Corp: Sarah Chen + 6 team members
+```
+
+### 5. Run
+```bash
+pnpm dev
+# Web → http://localhost:5173
+# API → http://localhost:3001
+```
+
+---
+
+## AI Providers
+
+LeaderFlow's agent system is provider-agnostic. Swap models without touching application code.
+
+```env
+AI_PROVIDER=anthropic   # or: openai | gemini | ollama | openrouter
+```
+
+| Provider | Fast model (triage) | Smart model (automation) | Key |
+|---|---|---|---|
+| `anthropic` | claude-haiku-4-5 | claude-sonnet-4-6 | `ANTHROPIC_API_KEY` |
+| `openai` | gpt-4o-mini | gpt-4o | `OPENAI_API_KEY` |
+| `gemini` | gemini-1.5-flash | gemini-1.5-pro | `GEMINI_API_KEY` |
+| `ollama` | llama3.2 | llama3.1:70b | *(none — local)* |
+| `openrouter` | llama-3.2-3b:free | claude-3.5-sonnet | `OPENROUTER_API_KEY` |
+
+Override any model individually:
+```env
+AI_FAST_MODEL=gpt-4o-mini      # per-item triage — latency-sensitive
+AI_SMART_MODEL=gpt-4o          # weekly analysis — quality-sensitive
+```
+
+Running fully air-gapped? Point Ollama at your local models and no data ever leaves your infrastructure.
 
 ---
 
 ## How It Works
 
-```
-       Sarah Chen (CEO)
-           ●
-          / \
-    Marcus   Priya
-      ●  ←←←  ●   ← red particle = escalation flowing up
-      |
-    Jamie
-      ●  →→→  ← blue particle = delegation flowing down
-```
+### The Org Chart
+The entire UI is a single SVG. Every member is a node. Every reporting relationship is an edge. Work items travel along those edges as animated particles using SVG `animateMotion`. There are no pages, no navigation, no dashboards to open. Everything is always visible.
 
-- **Red particles** — escalations moving up the chain
-- **Blue particles** — delegations moving down
-- **Orange particles** — new ingress items arriving
+Click a node → see that person's full queue in a detail panel.  
+Spot a cluster of red → something is escalating that hasn't been addressed.  
+Empty edges → your delegation is working.
 
-Click any node to see everything in that person's queue. Open the Flow Panel to triage the full stream. The daily ritual: open the app, process your hot spots, close it.
+### The Flow Panel
+The bottom drawer surfaces the full stream filterable by type, status, priority, and assignee. Each row shows the item's age, AI-suggested priority, and one-tap actions (acknowledge, delegate, complete, triage).
+
+### The Daily Ritual
+No push notifications. No notification badges. You come to LeaderFlow once a day, process your hot spots, and leave. The follow-up agent handles the rest while you're gone.
 
 ---
 
-## Demo (No Setup Required)
+## Agent System
 
-The fastest way to see LeaderFlow in action — no Docker, no database, no API keys:
+Four background workers run on BullMQ + Redis:
 
-```bash
-git clone https://github.com/your-org/leaderflow.git
-cd leaderflow
-pnpm install
-pnpm --filter web demo
+### Triage Agent *(fires per item, fast model)*
+When a work item is created, the triage agent analyzes it against your org's delegation history and suggests a priority and owner. Suggestions appear inline in the Triage Modal — one click to accept, one click to override.
+
+### Follow-up Agent *(runs every 4 hours)*
+Scans all active items and applies a status machine:
+
+```
+No activity > 48h  →  STALE
+Due within 24h     →  AT_RISK  
+Past due           →  OVERDUE
 ```
 
-Open `http://localhost:5173` — you'll get a fully populated Acme Corp org with 7 members, 11 live work items, animated particles, and a guided tour that walks you through every feature.
+Thresholds are configurable via `org.settings`. After flagging, it evaluates automation rules against all pending items.
 
-Hit **Replay Tour** in the top bar to restart the walkthrough at any time.
+### Escalation Router *(fires per escalation + hourly SLA check)*
+Routes escalations based on org structure and enforces SLA windows. If an escalation hasn't been acknowledged within the configured window, it re-escalates upward.
+
+### Automation Detector *(weekly, smart model)*
+Scans the last 30 days of completed items for repeating patterns. Flags automatable items and surfaces opportunities in the Weekly Review dashboard with confidence scores and time savings estimates.
 
 ---
 
-## Full Stack Setup
+## Integrations
 
-### Prerequisites
+### Slack
+Connect Slack and work items flow both ways. Emoji reactions create escalations (`:arrow_up:` → ESCALATION item). The `/leaderflow` slash command surfaces your queue inline. Delegations send Block Kit notifications to the assignee with context and one-click acknowledgment.
 
-- Node.js 20+
-- pnpm 9+
-- Docker (for Postgres + Redis)
+### Email
+Two modes: **forwarding** (forward any email to your LeaderFlow address) and **Gmail OAuth** (poll Gmail labels via googleapis). Both parse subject/body into work items and route them through your automation rules.
 
-### 1. Environment
+---
 
-```bash
-cp .env.example .env
-# Edit .env — minimum required:
-# DATABASE_URL=postgresql://leaderflow:leaderflow@localhost:5432/leaderflow
-# REDIS_URL=redis://localhost:6379
-# ANTHROPIC_API_KEY=sk-ant-...   ← powers the AI triage agent
+## Automation Rules
+
+Create rules that fire on item creation and during follow-up:
+
+```json
+{
+  "name": "Route security issues to the security lead",
+  "condition": { "titleContains": "security", "type": "INGRESS" },
+  "action": { "type": "delegate", "toMemberId": "mbr-security-lead" }
+}
 ```
 
-### 2. Start infrastructure
+Conditions: `titleContains`, `type`, `status`, `fromMemberId`, `toMemberId`, `source`  
+Actions: `delegate`, `create`, `updateStatus`
 
-```bash
-docker-compose up -d
-```
+Rules run without model calls — pure condition matching, zero latency.
 
-### 3. Database
+---
 
-```bash
-pnpm --filter api db:migrate
-pnpm --filter api db:seed    # seeds Acme Corp: Sarah Chen CEO + 6 team members
-```
+## Role-Based Views
 
-### 4. Run
+Append `?role=` to switch perspective without logging out:
 
-```bash
-pnpm dev
-```
+| `?role=leader` | Full org chart, all items — the default |
+|---|---|
+| `?role=manager` | Your subtree only — what you're responsible for |
+| `?role=member` | Single-node view — only items assigned to you |
 
-- **Web** → `http://localhost:5173`
-- **API** → `http://localhost:3001`
+---
+
+## Weekly Review
+
+Open the dashboard from the top bar. Recharts line + bar charts show:
+
+- Work item volume trend over the past 7 days
+- Distribution by type (ingress / delegation / escalation)
+- Completion rate by team member
+- Median triage speed and escalation response times
+- Delegation ratio by day of week
+- AI-detected automation opportunities with confidence scores
+
+---
+
+## PWA + Offline
+
+LeaderFlow installs on any device — desktop, iOS, Android. The service worker (Workbox NetworkFirst) caches the last-synced org tree and work items. When you go offline, an amber banner appears and mutations are disabled. When connectivity returns, the full stream resumes.
 
 ---
 
@@ -100,210 +239,65 @@ pnpm dev
 ```
 leaderflow/
 ├── apps/
-│   ├── web/          # React + Vite PWA
-│   └── api/          # Express + TypeScript REST API
-├── packages/
-│   └── shared/       # Types shared between web and api
-├── docker-compose.yml
-└── turbo.json
+│   ├── api/                   Express + TypeScript
+│   │   ├── src/
+│   │   │   ├── lib/ai/        Provider abstraction
+│   │   │   │   └── providers/ anthropic · openai · gemini · ollama · openrouter
+│   │   │   ├── jobs/          BullMQ workers
+│   │   │   │   └── processors/ triage · followup · escalation · automation
+│   │   │   ├── integrations/  slack · email
+│   │   │   ├── routes/        REST API
+│   │   │   └── services/      Business logic
+│   │   └── prisma/            Schema + migrations + seed
+│   └── web/                   React + Vite PWA
+│       └── src/
+│           ├── components/    OrgChart · FlowPanel · NodeDetail · Triage · Metrics
+│           ├── hooks/         useWorkItems · useRealtime · useOnlineStatus
+│           ├── stores/        Zustand (appStore)
+│           └── demo/          Self-contained demo mode
+└── packages/
+    └── shared/                Types shared between api and web
 ```
 
-### Frontend (`apps/web`)
+### Stack
 
-| What | How |
-|---|---|
-| UI framework | React 18 + TypeScript + Vite |
-| State | Zustand |
-| Org chart | SVG with `animateMotion` particles |
-| Metrics | Recharts (line + bar) |
-| Real-time | socket.io-client |
-| PWA | vite-plugin-pwa + Workbox |
-| Auth | Clerk (optional — runs without it in dev) |
-| Role views | `?role=leader\|manager\|member` query param |
-
-### Backend (`apps/api`)
-
-| What | How |
-|---|---|
-| Runtime | Node.js + Express + TypeScript |
-| Database | PostgreSQL + Prisma ORM |
-| Job queue | BullMQ + Redis |
-| AI agents | Anthropic Claude API |
-| Real-time | socket.io |
-| Auth | Clerk webhooks + middleware |
-| Integrations | Slack (@slack/bolt), Email (Gmail OAuth / forwarding) |
-| Encryption | AES-256-GCM for stored credentials |
-
----
-
-## AI Agents
-
-LeaderFlow runs four background agents via BullMQ:
-
-### Triage Agent *(per item, Claude Haiku)*
-Fires immediately when a work item is created. Analyzes the item against your org's delegation history and suggests:
-- **Priority** (LOW / MEDIUM / HIGH / URGENT)
-- **Owner** — who in the tree should actually handle this
-- **Rationale** — plain-English explanation of both suggestions
-
-Suggestions appear in the Triage Modal. One click to accept or override.
-
-### Follow-up Agent *(every 4 hours)*
-Runs the status machine against all active items:
-- `PENDING` → `STALE` if no activity in 48h (configurable)
-- `PENDING` → `AT_RISK` if due within 24h (configurable)
-- `PENDING` → `OVERDUE` if past due
-
-Then evaluates automation rules against all pending items.
-
-### Escalation Router *(per escalation + hourly SLA check)*
-Routes escalation items based on org structure and priority. Enforces SLA windows and re-escalates if no acknowledgment within the configured window.
-
-### Automation Detector *(weekly, Claude Sonnet)*
-Scans completed items for patterns and flags work that could be automated. Surfaces opportunities in the Weekly Review dashboard.
-
----
-
-## Integrations
-
-### Slack
-- Listens for mentions and DMs in Socket Mode (dev) or HTTP (prod)
-- `reaction_added` with `:arrow_up:` or `:escalate:` auto-creates an escalation item
-- `/leaderflow` slash command creates work items from Slack
-- Block Kit handoff notifications with priority emoji
-
-### Email
-- **Forwarding mode** — forward any email to your LeaderFlow inbox address
-- **Gmail OAuth mode** — polls Gmail for labeled messages via googleapis
-
-Both modes parse subject/body into work items and route based on org rules.
-
----
-
-## Automation Rules
-
-Create rules that fire when items are created or during follow-up processing:
-
-```json
-{
-  "name": "Auto-delegate security issues",
-  "condition": {
-    "titleContains": "security",
-    "type": "INGRESS"
-  },
-  "action": {
-    "type": "delegate",
-    "toMemberId": "mbr-security-lead"
-  }
-}
+```
+React · Vite · TypeScript · Zustand · Recharts · socket.io-client · vite-plugin-pwa
+Express · Prisma · PostgreSQL · BullMQ · Redis · socket.io
+Anthropic / OpenAI / Gemini / Ollama / OpenRouter
+Slack (@slack/bolt) · Gmail (googleapis)
+Turborepo · pnpm workspaces · Docker · nginx
 ```
 
-Condition fields: `titleContains`, `type`, `status`, `fromMemberId`, `toMemberId`, `source`  
-Action types: `delegate`, `create`, `updateStatus`
-
 ---
 
-## PWA & Offline
-
-LeaderFlow is a full Progressive Web App:
-
-- **Installable** — add to home screen on iOS/Android/desktop
-- **Offline-capable** — last synced org chart and work items available offline via Workbox NetworkFirst cache
-- **Offline banner** — amber banner + disabled mutations when network is lost
-- **Auto-update** — new service worker activates on next navigation
-
----
-
-## Weekly Review
-
-The metrics dashboard (top bar → **Weekly Review**) shows:
-
-- Work item volume trend (line chart)
-- Distribution by type and status (bar charts)
-- Median triage speed and escalation response time
-- Completion rate by team member
-- Delegation ratio by day
-- AI-detected automation opportunities
-
-In demo mode, these are populated with realistic mock data.
-
----
-
-## Role-Based Views
-
-Append `?role=` to the URL to switch perspective:
-
-| Role | What changes |
-|---|---|
-| `leader` (default) | Full org chart, all items |
-| `manager` | Subtree view — only your direct reports and their chains |
-| `member` | Single-node view — only items assigned to you |
-
----
-
-## Docker (Production)
+## Production
 
 ```bash
-# Build and run everything
 docker-compose --profile production up --build
-
-# Or build images individually
-docker build -t leaderflow-api ./apps/api
-docker build -t leaderflow-web ./apps/web
 ```
 
-The web image is nginx:alpine serving the Vite build with SPA routing and aggressive asset caching.
-
----
-
-## Environment Variables
-
-### API (`apps/api/.env`)
-
-| Variable | Required | Description |
-|---|---|---|
-| `DATABASE_URL` | ✅ | PostgreSQL connection string |
-| `REDIS_URL` | ✅ | Redis connection string |
-| `ANTHROPIC_API_KEY` | ✅ | Powers triage + automation agents |
-| `ENCRYPTION_KEY` | ✅ | 32-byte hex key for credential encryption |
-| `SLACK_BOT_TOKEN` | — | Slack integration (`xoxb-...`) |
-| `SLACK_APP_TOKEN` | — | Socket Mode token (`xapp-...`) |
-| `SLACK_SIGNING_SECRET` | — | Webhook verification |
-| `CLERK_SECRET_KEY` | — | Auth (optional in dev) |
-
-### Web (`apps/web/.env`)
-
-| Variable | Required | Description |
-|---|---|---|
-| `VITE_API_URL` | — | API base URL (default: `http://localhost:3001`) |
-| `VITE_CLERK_PUBLISHABLE_KEY` | — | Auth (optional in dev) |
-| `VITE_DEMO_MODE` | — | Set `true` to run self-contained demo |
-
----
-
-## Tech Stack At a Glance
-
-```
-React · Vite · TypeScript · Zustand · Recharts · socket.io
-Express · Prisma · PostgreSQL · BullMQ · Redis
-Anthropic Claude · @slack/bolt · googleapis
-Turborepo · pnpm workspaces · Docker
-```
+The web image is nginx:alpine with SPA routing and aggressive asset caching. The API image is a multi-stage node:22-alpine build. Integration credentials are encrypted at rest with AES-256-GCM.
 
 ---
 
 ## Contributing
 
-1. Fork and clone
-2. `pnpm install`
-3. `docker-compose up -d`
-4. `pnpm --filter api db:migrate && pnpm --filter api db:seed`
-5. `pnpm dev`
+```bash
+git clone https://github.com/kwad77/leaderflow.git
+cd leaderflow
+pnpm install
+docker-compose up -d
+pnpm --filter api db:migrate && pnpm --filter api db:seed
+pnpm dev
+```
 
-The monorepo uses Turborepo for build orchestration. `pnpm dev` starts both `apps/web` and `apps/api` in parallel with hot reload.
+`pnpm dev` starts both apps in parallel with hot reload via Turborepo. The demo (`pnpm --filter web demo`) needs no backend at all.
 
 ---
 
-## License
+<div align="center">
 
-MIT
+MIT License · Built with [Claude Code](https://claude.ai/code)
+
+</div>
