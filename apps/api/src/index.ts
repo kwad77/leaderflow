@@ -39,9 +39,29 @@ initSocketServer(httpServer);
 app.use(helmet());
 app.use(pinoHttp({ logger }));
 
+// Request ID middleware — adds X-Request-ID to every response for tracing
+app.use((req, res, next) => {
+  const id = req.headers['x-request-id'] as string
+    || Math.random().toString(36).slice(2, 11);
+  res.setHeader('X-Request-ID', id);
+  (req as any).requestId = id;
+  next();
+});
+
+const allowedOrigins = [
+  process.env.WEB_URL ?? 'http://localhost:5173',
+  ...(process.env.ADDITIONAL_ORIGINS ?? '').split(',').filter(Boolean),
+];
+
 app.use(
   cors({
-    origin: process.env.WEB_URL ?? 'http://localhost:5173',
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
   })
 );

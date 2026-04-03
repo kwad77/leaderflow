@@ -29,6 +29,16 @@ const STATUS_COLOR: Record<string, string> = {
   ARCHIVED: '#4b5563',
 };
 
+function slaLabel(dueAt: string | null | undefined): { label: string; color: string } | null {
+  if (!dueAt) return null;
+  const diffMs = new Date(dueAt).getTime() - Date.now();
+  if (diffMs < 0) return { label: 'Overdue', color: '#ef4444' };
+  const hours = diffMs / 3600000;
+  if (hours < 4) return { label: `${Math.ceil(hours)}h`, color: '#ef4444' };
+  if (hours < 24) return { label: `${Math.floor(hours)}h`, color: '#f59e0b' };
+  return { label: `${Math.floor(hours / 24)}d`, color: '#22c55e' };
+}
+
 function formatAge(dateStr: string): string {
   const ms = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(ms / 60000);
@@ -182,15 +192,36 @@ export const WorkItemRow: React.FC<WorkItemRowProps> = ({ item, onAction, select
           marginTop: 6,
         }}
       >
-        <span
-          style={{
-            fontSize: 10,
-            color: STATUS_COLOR[item.status] ?? '#94a3b8',
-            fontWeight: 600,
-          }}
-        >
-          {item.status.replace('_', ' ')}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span
+            style={{
+              fontSize: 10,
+              color: STATUS_COLOR[item.status] ?? '#94a3b8',
+              fontWeight: 600,
+            }}
+          >
+            {item.status.replace('_', ' ')}
+          </span>
+          {(() => {
+            const sla = slaLabel(item.dueAt);
+            if (!sla) return null;
+            return (
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: sla.color,
+                  background: `${sla.color}26`,
+                  padding: '2px 6px',
+                  borderRadius: 4,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {sla.label}
+              </span>
+            );
+          })()}
+        </div>
 
         <div style={{ display: 'flex', gap: 6 }}>
           {item.status === 'PENDING' && (

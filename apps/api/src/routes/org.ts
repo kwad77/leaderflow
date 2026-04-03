@@ -48,11 +48,11 @@ router.get('/members', protect, async (req: Request, res: Response, next: NextFu
  * Add a new member to the org.
  */
 const createMemberSchema = z.object({
-  name: z.string().min(1),
-  email: z.string().email(),
-  role: z.string().min(1),
-  parentId: z.string().optional(),
-  userId: z.string().optional(),
+  name: z.string().min(1).max(255),
+  email: z.string().email().max(320),
+  role: z.string().min(1).max(255),
+  parentId: z.string().max(36).optional(),
+  userId: z.string().max(36).optional(),
 });
 
 router.post('/members', protect, validate(createMemberSchema), async (req: Request, res: Response, next: NextFunction) => {
@@ -79,10 +79,10 @@ router.get('/members/:id', protect, async (req: Request, res: Response, next: Ne
 });
 
 const updateMemberSchema = z.object({
-  name: z.string().min(1).optional(),
-  email: z.string().email().optional(),
-  role: z.string().min(1).optional(),
-  parentId: z.string().nullable().optional(),
+  name: z.string().min(1).max(255).optional(),
+  email: z.string().email().max(320).optional(),
+  role: z.string().min(1).max(255).optional(),
+  parentId: z.string().max(36).nullable().optional(),
 });
 
 /**
@@ -159,6 +159,66 @@ router.delete('/members/:id', protect, async (req: Request, res: Response, next:
     });
 
     res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── Default org settings ────────────────────────────────────────────────────
+
+const DEFAULT_SETTINGS = {
+  staleThresholdHours: 48,
+  atRiskHoursBeforeDue: 24,
+  slaByPriority: {
+    LOW: 168,
+    MEDIUM: 72,
+    HIGH: 24,
+    URGENT: 4,
+  },
+};
+
+/**
+ * GET /api/org/settings
+ * Returns org settings JSON (or defaults if null).
+ */
+router.get('/settings', protect, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const org = await orgService.getFirstOrg();
+    const full = await prisma.organization.findUnique({ where: { id: org.id } });
+    const settings = { ...DEFAULT_SETTINGS, ...(full?.settings as object | null ?? {}) };
+    res.json(settings);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PUT /api/org/settings
+ * Validates and merges settings, then saves.
+ */
+const updateSettingsSchema = z.object({
+  staleThresholdHours: z.number().int().min(1).max(720).optional(),
+  atRiskHoursBeforeDue: z.number().int().min(1).max(168).optional(),
+  slaByPriority: z.object({
+    LOW: z.number().int().min(1),
+    MEDIUM: z.number().int().min(1),
+    HIGH: z.number().int().min(1),
+    URGENT: z.number().int().min(1),
+  }).optional(),
+});
+
+router.put('/settings', protect, validate(updateSettingsSchema), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const body = updateSettingsSchema.parse(req.body);
+    const org = await orgService.getFirstOrg();
+    const full = await prisma.organization.findUnique({ where: { id: org.id } });
+    const existing = { ...DEFAULT_SETTINGS, ...(full?.settings as object | null ?? {}) };
+    const merged = { ...existing, ...body };
+    await prisma.organization.update({
+      where: { id: org.id },
+      data: { settings: merged },
+    });
+    res.json(merged);
   } catch (err) {
     next(err);
   }

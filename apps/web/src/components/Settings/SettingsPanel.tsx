@@ -1,19 +1,81 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useAppStore } from '../../stores/appStore';
 import type { OrgTree } from '@leaderflow/shared';
+import {
+  fetchOrgSettings,
+  updateOrgSettings,
+  DEFAULT_ORG_SETTINGS,
+  type OrgSettings,
+} from '../../lib/api';
 
 function computeMaxDepth(node: OrgTree, current = 0): number {
   if (node.directReports.length === 0) return current;
   return Math.max(...node.directReports.map((c) => computeMaxDepth(c, current + 1)));
 }
 
+const INPUT_STYLE: React.CSSProperties = {
+  width: 64,
+  background: '#0f172a',
+  border: '1px solid #334155',
+  borderRadius: 4,
+  color: '#f1f5f9',
+  fontSize: 12,
+  padding: '4px 8px',
+  textAlign: 'right',
+};
+
 export const SettingsPanel: React.FC = () => {
-  const { orgDepth, setOrgDepth, setSettingsOpen, orgTree } = useAppStore();
+  const { orgDepth, setOrgDepth, setSettingsOpen, orgTree, isOnline } = useAppStore();
 
   const maxDepth = useMemo(() => {
     if (!orgTree) return 6;
     return computeMaxDepth(orgTree) + 1; // +1 to convert 0-indexed depth to level count
   }, [orgTree]);
+
+  // SLA settings state
+  const [slaSettings, setSlaSettings] = useState<OrgSettings>(DEFAULT_ORG_SETTINGS);
+  const [savedMsg, setSavedMsg] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOnline) return; // demo mode: skip fetch, keep defaults
+    fetchOrgSettings()
+      .then(setSlaSettings)
+      .catch(() => {/* keep defaults on error */});
+  }, [isOnline]);
+
+  const handleSlaChange = (field: keyof Omit<OrgSettings, 'slaByPriority'>, value: string) => {
+    const n = parseInt(value, 10);
+    if (isNaN(n)) return;
+    setSlaSettings((prev) => ({ ...prev, [field]: n }));
+  };
+
+  const handleSlaPriorityChange = (key: keyof OrgSettings['slaByPriority'], value: string) => {
+    const n = parseInt(value, 10);
+    if (isNaN(n)) return;
+    setSlaSettings((prev) => ({
+      ...prev,
+      slaByPriority: { ...prev.slaByPriority, [key]: n },
+    }));
+  };
+
+  const handleSave = async () => {
+    setSaveError(null);
+    if (!isOnline) {
+      // demo mode: just show confirmation
+      setSavedMsg(true);
+      setTimeout(() => setSavedMsg(false), 2000);
+      return;
+    }
+    try {
+      const updated = await updateOrgSettings(slaSettings);
+      setSlaSettings(updated);
+      setSavedMsg(true);
+      setTimeout(() => setSavedMsg(false), 2000);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Save failed');
+    }
+  };
 
   return (
     <div
@@ -152,7 +214,7 @@ export const SettingsPanel: React.FC = () => {
         </div>
 
         {/* Display section — placeholder */}
-        <div>
+        <div style={{ marginBottom: 28 }}>
           <div
             style={{
               fontSize: 11,
@@ -173,6 +235,102 @@ export const SettingsPanel: React.FC = () => {
             }}
           >
             More display options coming soon.
+          </div>
+        </div>
+
+        {/* SLA & Timeouts section */}
+        <div>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: '#64748b',
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              marginBottom: 12,
+            }}
+          >
+            SLA &amp; Timeouts
+          </div>
+
+          {/* Stale threshold */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <span style={{ fontSize: 12, color: '#94a3b8' }}>Stale threshold</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                type="number"
+                min={1}
+                max={720}
+                value={slaSettings.staleThresholdHours}
+                onChange={(e) => handleSlaChange('staleThresholdHours', e.target.value)}
+                style={INPUT_STYLE}
+              />
+              <span style={{ fontSize: 11, color: '#64748b' }}>h</span>
+            </div>
+          </div>
+
+          {/* At-risk before due */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <span style={{ fontSize: 12, color: '#94a3b8' }}>At-risk before due</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                type="number"
+                min={1}
+                max={168}
+                value={slaSettings.atRiskHoursBeforeDue}
+                onChange={(e) => handleSlaChange('atRiskHoursBeforeDue', e.target.value)}
+                style={INPUT_STYLE}
+              />
+              <span style={{ fontSize: 11, color: '#64748b' }}>h</span>
+            </div>
+          </div>
+
+          {/* SLA by priority */}
+          <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8, fontWeight: 500 }}>
+            SLA by priority
+          </div>
+          {(['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const).map((p) => (
+            <div
+              key={p}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}
+            >
+              <span style={{ fontSize: 12, color: '#64748b', width: 60 }}>{p}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input
+                  type="number"
+                  min={1}
+                  value={slaSettings.slaByPriority[p]}
+                  onChange={(e) => handleSlaPriorityChange(p, e.target.value)}
+                  style={INPUT_STYLE}
+                />
+                <span style={{ fontSize: 11, color: '#64748b' }}>h</span>
+              </div>
+            </div>
+          ))}
+
+          {/* Save button */}
+          <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              onClick={handleSave}
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: '#f1f5f9',
+                background: '#3b82f6',
+                border: 'none',
+                borderRadius: 6,
+                padding: '6px 14px',
+                cursor: 'pointer',
+              }}
+            >
+              Save Changes
+            </button>
+            {savedMsg && (
+              <span style={{ fontSize: 11, color: '#22c55e', fontWeight: 600 }}>✓ Saved</span>
+            )}
+            {saveError && (
+              <span style={{ fontSize: 11, color: '#ef4444' }}>{saveError}</span>
+            )}
           </div>
         </div>
 

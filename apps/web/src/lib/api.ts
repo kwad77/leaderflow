@@ -67,6 +67,41 @@ export async function createMember(data: {
   });
 }
 
+// ─── Org Settings ─────────────────────────────────────────────────────────────
+
+export interface OrgSettings {
+  staleThresholdHours: number;
+  atRiskHoursBeforeDue: number;
+  slaByPriority: {
+    LOW: number;
+    MEDIUM: number;
+    HIGH: number;
+    URGENT: number;
+  };
+}
+
+export const DEFAULT_ORG_SETTINGS: OrgSettings = {
+  staleThresholdHours: 48,
+  atRiskHoursBeforeDue: 24,
+  slaByPriority: {
+    LOW: 168,
+    MEDIUM: 72,
+    HIGH: 24,
+    URGENT: 4,
+  },
+};
+
+export async function fetchOrgSettings(): Promise<OrgSettings> {
+  return request('/org/settings');
+}
+
+export async function updateOrgSettings(body: Partial<OrgSettings>): Promise<OrgSettings> {
+  return request('/org/settings', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+}
+
 // ─── Work Items ───────────────────────────────────────────────────────────────
 
 export interface ItemsFilter {

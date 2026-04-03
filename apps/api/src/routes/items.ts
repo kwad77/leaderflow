@@ -61,8 +61,8 @@ const createItemSchema = z.object({
   description: z.string().max(5000).optional(),
   type: z.enum(workItemTypeValues),
   priority: z.enum(priorityValues),
-  toMemberId: z.string().min(1),
-  fromMemberId: z.string().optional(),
+  toMemberId: z.string().min(1).max(36),
+  fromMemberId: z.string().max(36).optional(),
   fromExternal: z.string().max(500).optional(),
   dueAt: z.string().datetime().optional(),
   tags: z.array(z.string()).optional(),
@@ -83,8 +83,8 @@ router.post('/', protect, validate(createItemSchema), async (req: Request, res: 
  * POST /api/items/:id/delegate
  */
 const delegateSchema = z.object({
-  toMemberId: z.string(),
-  note: z.string().optional(),
+  toMemberId: z.string().min(1).max(36),
+  note: z.string().max(2000).optional(),
 });
 
 router.post('/:id/delegate', protect, async (req: Request, res: Response, next: NextFunction) => {
@@ -115,7 +115,7 @@ router.post('/:id/acknowledge', protect, async (req: Request, res: Response, nex
  * POST /api/items/:id/complete
  */
 const completeSchema = z.object({
-  note: z.string().optional(),
+  note: z.string().max(2000).optional(),
 });
 
 router.post('/:id/complete', protect, async (req: Request, res: Response, next: NextFunction) => {
@@ -133,10 +133,10 @@ router.post('/:id/complete', protect, async (req: Request, res: Response, next: 
  * POST /api/items/bulk
  */
 const bulkActionSchema = z.object({
-  itemIds: z.array(z.string().min(1)).min(1).max(100),
+  itemIds: z.array(z.string().min(1).max(36)).min(1).max(100),
   action: z.enum(['acknowledge', 'complete', 'archive', 'delegate']),
-  toMemberId: z.string().optional(),
-  note: z.string().optional(),
+  toMemberId: z.string().max(36).optional(),
+  note: z.string().max(2000).optional(),
 });
 
 router.post('/bulk', protect, validate(bulkActionSchema), async (req: Request, res: Response, next: NextFunction) => {
