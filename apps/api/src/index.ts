@@ -2,9 +2,14 @@ import 'dotenv/config';
 import { createServer } from 'http';
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import pinoHttp from 'pino-http';
 import { initSocketServer } from './lib/socket';
 import { withClerk } from './middleware/auth';
 import { errorHandler, notFound } from './middleware/errorHandler';
+import { logger } from './lib/logger';
+import { apiLimiter, strictLimiter } from './middleware/rateLimiter';
+import healthRouter from './routes/health';
 
 // Self-register integrations before routes load
 import './integrations/slack.integration';
@@ -18,6 +23,7 @@ import briefingRoutes from './routes/briefing';
 import integrationsRoutes from './routes/integrations';
 import webhooksRoutes from './routes/webhooks';
 import automationRoutes from './routes/automation';
+import authRouter from './routes/auth';
 
 const app = express();
 const httpServer = createServer(app);
@@ -26,6 +32,9 @@ const httpServer = createServer(app);
 initSocketServer(httpServer);
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
+
+app.use(helmet());
+app.use(pinoHttp({ logger }));
 
 app.use(
   cors({
@@ -48,11 +57,18 @@ app.use(express.urlencoded({ extended: true }));
 // Clerk middleware (attaches auth state; no-op if keys not set)
 app.use(withClerk);
 
+// ─── Rate limiting ────────────────────────────────────────────────────────────
+
+app.use('/api', apiLimiter);
+app.use('/api/auth', strictLimiter);
+
 // ─── Health check ─────────────────────────────────────────────────────────────
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+app.use('/api/health', healthRouter);
 
 // ─── API Routes ───────────────────────────────────────────────────────────────
 
@@ -62,6 +78,7 @@ app.use('/api/briefing', briefingRoutes);
 app.use('/api/integrations', integrationsRoutes);
 app.use('/api/webhooks', webhooksRoutes);
 app.use('/api/automation', automationRoutes);
+app.use('/api/auth', authRouter);
 
 // ─── Error handling ───────────────────────────────────────────────────────────
 
@@ -73,21 +90,21 @@ app.use(errorHandler);
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
 
 httpServer.listen(PORT, async () => {
-  console.log(`\n🚀 LeaderFlow API running on http://localhost:${PORT}`);
-  console.log(`   WebSocket: ws://localhost:${PORT}`);
-  console.log(`   Health: http://localhost:${PORT}/health\n`);
+  logger.info(`LeaderFlow API running on http://localhost:${PORT}`);
+  logger.info(`WebSocket: ws://localhost:${PORT}`);
+  logger.info(`Health: http://localhost:${PORT}/health`);
 
   // Start all configured integrations
   try {
     await integrationService.startAllIntegrations();
   } catch (err) {
-    console.error('[integrations] Startup error:', err);
+    logger.error({ err }, '[integrations] Startup error');
   }
 
   try {
     await startJobWorkers();
   } catch (err) {
-    console.error('[jobs] Startup error:', err);
+    logger.error({ err }, '[jobs] Startup error');
   }
 });
 

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import * as workItemService from '../services/workItem.service';
 import * as orgService from '../services/org.service';
 import { protect } from '../middleware/auth';
+import { validate } from '../middleware/validate';
 
 const router = Router();
 
@@ -49,18 +50,18 @@ router.get('/:id', protect, async (req: Request, res: Response, next: NextFuncti
  * POST /api/items
  */
 const createItemSchema = z.object({
-  title: z.string().min(1),
-  description: z.string().optional(),
+  title: z.string().min(1).max(500),
+  description: z.string().max(5000).optional(),
   type: z.enum(workItemTypeValues),
   priority: z.enum(priorityValues),
-  toMemberId: z.string(),
+  toMemberId: z.string().min(1),
   fromMemberId: z.string().optional(),
-  fromExternal: z.string().optional(),
+  fromExternal: z.string().max(500).optional(),
   dueAt: z.string().datetime().optional(),
   tags: z.array(z.string()).optional(),
 });
 
-router.post('/', protect, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/', protect, validate(createItemSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = createItemSchema.parse(req.body);
     const org = await orgService.getFirstOrg();

@@ -4,6 +4,7 @@ import { FlowPanel } from './components/FlowPanel';
 import { NodeDetail } from './components/NodeDetail';
 import { TriageModal } from './components/Triage';
 import { MetricsDashboard } from './components/Metrics';
+import { SettingsPanel } from './components/Settings';
 import { useAppStore } from './stores/appStore';
 import { useWorkItems } from './hooks/useWorkItems';
 import { useRealtime } from './hooks/useRealtime';
@@ -24,9 +25,11 @@ const AppContent: React.FC = () => {
     loading,
     error,
     metricsOpen,
+    settingsOpen,
     setOrg,
     setError,
     setMetricsOpen,
+    setSettingsOpen,
     setIsOnline,
     setCurrentUserRole,
   } = useAppStore();
@@ -198,7 +201,7 @@ const AppContent: React.FC = () => {
           </>
         )}
 
-        {/* Weekly Review button */}
+        {/* Weekly Review button + Settings gear */}
         <div style={{ flex: 1 }} />
         <button
           onClick={() => setMetricsOpen(true)}
@@ -215,6 +218,26 @@ const AppContent: React.FC = () => {
           }}
         >
           Weekly Review
+        </button>
+        <button
+          onClick={() => setSettingsOpen(!settingsOpen)}
+          style={{
+            width: 32,
+            height: 32,
+            background: settingsOpen ? '#1e40af' : '#1e293b',
+            border: `1px solid ${settingsOpen ? '#3b82f6' : '#334155'}`,
+            borderRadius: 6,
+            color: settingsOpen ? '#93c5fd' : '#94a3b8',
+            fontSize: 16,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          aria-label="Open settings"
+          title="Settings"
+        >
+          ⚙
         </button>
       </div>
 
@@ -257,6 +280,9 @@ const AppContent: React.FC = () => {
 
       {/* Metrics dashboard overlay */}
       <MetricsDashboard />
+
+      {/* Settings panel */}
+      {settingsOpen && <SettingsPanel />}
     </div>
   );
 };

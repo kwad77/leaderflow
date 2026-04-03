@@ -24,6 +24,11 @@ export interface AppState {
   triageOpen: boolean;
   triageParentItem: WorkItem | null;
   metricsOpen: boolean;
+  searchOpen: boolean;
+
+  // Org chart depth
+  orgDepth: number;
+  settingsOpen: boolean;
 
   // Online status
   isOnline: boolean;
@@ -48,6 +53,9 @@ export interface AppState {
   openTriage: (parentItem?: WorkItem) => void;
   closeTriage: () => void;
   setMetricsOpen: (open: boolean) => void;
+  setSearchOpen: (open: boolean) => void;
+  setOrgDepth: (depth: number) => void;
+  setSettingsOpen: (open: boolean) => void;
   setIsOnline: (online: boolean) => void;
   setCurrentUserRole: (role: 'leader' | 'manager' | 'member') => void;
   setCurrentUser: (member: OrgMember | null) => void;
@@ -68,6 +76,9 @@ export const useAppStore = create<AppState>((set) => ({
   triageOpen: false,
   triageParentItem: null,
   metricsOpen: false,
+  searchOpen: false,
+  orgDepth: Number(localStorage.getItem('leaderflow-org-depth') ?? '3'),
+  settingsOpen: false,
   isOnline: true,
   currentUserRole: 'leader',
   currentUser: null,
@@ -105,6 +116,15 @@ export const useAppStore = create<AppState>((set) => ({
   closeTriage: () => set({ triageOpen: false, triageParentItem: null }),
 
   setMetricsOpen: (open) => set({ metricsOpen: open }),
+
+  setSearchOpen: (open) => set({ searchOpen: open }),
+
+  setOrgDepth: (depth) => {
+    localStorage.setItem('leaderflow-org-depth', String(depth));
+    set({ orgDepth: depth });
+  },
+
+  setSettingsOpen: (open) => set({ settingsOpen: open }),
 
   setIsOnline: (online) => set({ isOnline: online }),
 

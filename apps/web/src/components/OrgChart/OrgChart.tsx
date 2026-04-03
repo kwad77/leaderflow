@@ -15,6 +15,19 @@ function flattenTree(node: OrgTree): OrgMember[] {
   return [node, ...node.directReports.flatMap(flattenTree)];
 }
 
+// Build a map of memberId -> depth (root = 0)
+function buildDepthMap(node: OrgTree, depth: number, map: Map<string, number>): void {
+  map.set(node.id, depth);
+  for (const child of node.directReports) {
+    buildDepthMap(child, depth + 1, map);
+  }
+}
+
+// For a given node at the depth cutoff, count hidden children subtree members
+function countHiddenChildren(node: OrgTree): number {
+  return node.directReports.length;
+}
+
 interface Transform {
   x: number;
   y: number;
@@ -23,7 +36,10 @@ interface Transform {
 
 export const OrgChart: React.FC<OrgChartProps> = ({ root, items }) => {
   const { positions, edges, totalWidth, totalHeight } = useOrgLayout(root, items);
-  const { selectedMemberId, setSelectedMember, openTriage, currentUserRole, currentUser } = useAppStore();
+  const {
+    selectedMemberId, setSelectedMember, openTriage, currentUserRole, currentUser,
+    orgDepth, setOrgDepth,
+  } = useAppStore();
 
   const svgRef = useRef<SVGSVGElement>(null);
   const [transform, setTransform] = useState<Transform>({ x: 0, y: 0, scale: 1 });
@@ -31,6 +47,29 @@ export const OrgChart: React.FC<OrgChartProps> = ({ root, items }) => {
   const panStart = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
 
   const allMembers = flattenTree(root);
+
+  // Build depth map for all members
+  const depthMap = React.useMemo(() => {
+    const map = new Map<string, number>();
+    buildDepthMap(root, 0, map);
+    return map;
+  }, [root]);
+
+  // Nodes at the depth boundary (depth === orgDepth - 1) that have hidden children
+  const expandHints = React.useMemo(() => {
+    const hints: Array<{ memberId: string; hiddenCount: number }> = [];
+    function traverse(node: OrgTree, depth: number) {
+      if (depth === orgDepth - 1 && node.directReports.length > 0) {
+        hints.push({ memberId: node.id, hiddenCount: countHiddenChildren(node) });
+      } else if (depth < orgDepth - 1) {
+        for (const child of node.directReports) {
+          traverse(child, depth + 1);
+        }
+      }
+    }
+    traverse(root, 0);
+    return hints;
+  }, [root, orgDepth]);
 
   // Role-based tree filtering: members only see themselves + direct parent
   const visibleMemberIds: Set<string> | null = React.useMemo(() => {
@@ -124,8 +163,12 @@ export const OrgChart: React.FC<OrgChartProps> = ({ root, items }) => {
         <rect width="100%" height="100%" fill="url(#grid)" />
 
         <g transform={`translate(${transform.x}, ${transform.y}) scale(${transform.scale})`}>
-          {/* Edges (rendered below nodes) */}
+          {/* Edges (rendered below nodes) — gated by orgDepth */}
           {edges.map((edge) => {
+            const sourceDepth = depthMap.get(edge.sourceId) ?? 0;
+            const targetDepth = depthMap.get(edge.targetId) ?? 0;
+            // Hide edge if either endpoint is beyond visible depth
+            if (sourceDepth >= orgDepth || targetDepth >= orgDepth) return null;
             const sourcePos = positions.get(edge.sourceId);
             const targetPos = positions.get(edge.targetId);
             if (!sourcePos || !targetPos) return null;
@@ -139,9 +182,11 @@ export const OrgChart: React.FC<OrgChartProps> = ({ root, items }) => {
             );
           })}
 
-          {/* Nodes */}
+          {/* Nodes — gated by orgDepth */}
           {allMembers.map((member) => {
             if (visibleMemberIds && !visibleMemberIds.has(member.id)) return null;
+            const memberDepth = depthMap.get(member.id) ?? 0;
+            if (memberDepth >= orgDepth) return null;
             const pos = positions.get(member.id);
             if (!pos) return null;
             const memberItems = activeItems.filter(
@@ -157,6 +202,50 @@ export const OrgChart: React.FC<OrgChartProps> = ({ root, items }) => {
                 selected={selectedMemberId === member.id}
                 onClick={handleNodeClick}
               />
+            );
+          })}
+
+          {/* Expand hints — shown below nodes at the depth boundary */}
+          {expandHints.map(({ memberId, hiddenCount }) => {
+            if (visibleMemberIds && !visibleMemberIds.has(memberId)) return null;
+            const pos = positions.get(memberId);
+            if (!pos) return null;
+            // Position the pill centered below the node
+            const hintX = pos.x + 80; // NODE_WIDTH / 2
+            const hintY = pos.y + 80 + 18; // NODE_HEIGHT + spacing
+            const pillW = 64;
+            const pillH = 20;
+            return (
+              <g
+                key={`hint-${memberId}`}
+                onClick={() => setOrgDepth(orgDepth + 1)}
+                style={{ cursor: 'pointer' }}
+                role="button"
+                aria-label={`Show ${hiddenCount} more levels`}
+              >
+                <rect
+                  x={hintX - pillW / 2}
+                  y={hintY - pillH / 2}
+                  width={pillW}
+                  height={pillH}
+                  rx={10}
+                  fill="#1e293b"
+                  stroke="#334155"
+                  strokeWidth={1}
+                />
+                <text
+                  x={hintX}
+                  y={hintY}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fill="#64748b"
+                  fontSize={10}
+                  fontWeight="600"
+                  style={{ userSelect: 'none', pointerEvents: 'none' }}
+                >
+                  +{hiddenCount} more
+                </text>
+              </g>
             );
           })}
         </g>

@@ -5,6 +5,7 @@ import { protect } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
 import { prisma } from '../lib/prisma';
 import { emitToOrg } from '../lib/socket';
+import { validate } from '../middleware/validate';
 
 const router = Router();
 
@@ -54,7 +55,7 @@ const createMemberSchema = z.object({
   userId: z.string().optional(),
 });
 
-router.post('/members', protect, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/members', protect, validate(createMemberSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = createMemberSchema.parse(req.body);
     const org = await orgService.getFirstOrg();
