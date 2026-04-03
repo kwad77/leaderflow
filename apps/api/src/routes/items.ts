@@ -224,4 +224,92 @@ router.post('/bulk', protect, validate(bulkActionSchema), async (req: Request, r
   }
 });
 
+/**
+ * POST /api/items/:id/comments
+ */
+const addCommentSchema = z.object({
+  note: z.string().min(1).max(2000),
+  authorId: z.string().optional(),
+});
+
+router.post('/:id/comments', protect, validate(addCommentSchema), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const org = await orgService.getFirstOrg();
+    const { id } = req.params;
+
+    const item = await prisma.workItem.findUnique({ where: { id } });
+    if (!item || item.orgId !== org.id) {
+      return next(createError('Work item not found', 404));
+    }
+
+    const body = addCommentSchema.parse(req.body);
+
+    const update = await prisma.workItemUpdate.create({
+      data: {
+        itemId: id,
+        note: body.note,
+        authorId: body.authorId ?? null,
+        statusChange: null,
+      },
+    });
+
+    // Refetch full item and emit
+    const updatedItem = await prisma.workItem.findUnique({
+      where: { id },
+      include: {
+        from: { select: { id: true, name: true, email: true, role: true, orgId: true, parentId: true, createdAt: true } },
+        to: { select: { id: true, name: true, email: true, role: true, orgId: true, parentId: true, createdAt: true } },
+        updates: { orderBy: { createdAt: 'asc' } },
+      },
+    });
+
+    if (updatedItem) {
+      emitToOrg(org.id, {
+        type: 'ITEM_UPDATED',
+        payload: {
+          ...updatedItem,
+          createdAt: updatedItem.createdAt.toISOString(),
+          updatedAt: updatedItem.updatedAt.toISOString(),
+          dueAt: updatedItem.dueAt?.toISOString() ?? null,
+          acknowledgedAt: updatedItem.acknowledgedAt?.toISOString() ?? null,
+          completedAt: updatedItem.completedAt?.toISOString() ?? null,
+          from: updatedItem.from ? { ...updatedItem.from, createdAt: updatedItem.from.createdAt.toISOString() } : null,
+          to: { ...updatedItem.to, createdAt: updatedItem.to!.createdAt.toISOString() },
+          updates: updatedItem.updates.map((u) => ({ ...u, createdAt: u.createdAt.toISOString() })),
+        } as any,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    return res.status(201).json({ ...update, createdAt: update.createdAt.toISOString() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/items/:id/comments
+ */
+router.get('/:id/comments', protect, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const org = await orgService.getFirstOrg();
+    const { id } = req.params;
+
+    const item = await prisma.workItem.findUnique({ where: { id }, select: { id: true, orgId: true } });
+    if (!item || item.orgId !== org.id) {
+      return next(createError('Work item not found', 404));
+    }
+
+    const updates = await prisma.workItemUpdate.findMany({
+      where: { itemId: id },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, itemId: true, authorId: true, note: true, statusChange: true, createdAt: true },
+    });
+
+    return res.json(updates.map((u) => ({ ...u, createdAt: u.createdAt.toISOString() })));
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

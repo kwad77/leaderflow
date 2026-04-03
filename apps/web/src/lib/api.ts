@@ -2,11 +2,25 @@ import type {
   OrgTree,
   OrgMember,
   WorkItem,
+  WorkItemUpdate,
   BriefingSummary,
   WeeklyBriefing,
   CreateWorkItemBody,
   DelegateItemBody,
 } from '@leaderflow/shared';
+
+// ─── Time helper ──────────────────────────────────────────────────────────────
+
+export function relativeTime(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
 
 const BASE_URL = '/api';
 
@@ -111,6 +125,29 @@ export async function acknowledgeItem(id: string): Promise<WorkItem> {
 
 export async function completeItem(id: string, note?: string): Promise<WorkItem> {
   return request(`/items/${id}/complete`, {
+    method: 'POST',
+    body: JSON.stringify({ note }),
+  });
+}
+
+export async function bulkUpdateItems(data: {
+  itemIds: string[];
+  action: 'acknowledge' | 'complete' | 'archive' | 'delegate';
+  toMemberId?: string;
+  note?: string;
+}): Promise<{ updated: number; itemIds: string[] }> {
+  return request('/items/bulk', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getItemComments(itemId: string): Promise<WorkItemUpdate[]> {
+  return request(`/items/${itemId}/comments`);
+}
+
+export async function addItemComment(itemId: string, note: string): Promise<WorkItemUpdate> {
+  return request(`/items/${itemId}/comments`, {
     method: 'POST',
     body: JSON.stringify({ note }),
   });

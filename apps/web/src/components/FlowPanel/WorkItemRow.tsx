@@ -6,6 +6,8 @@ import { useAppStore } from '../../stores/appStore';
 interface WorkItemRowProps {
   item: WorkItem;
   onAction: () => void;
+  selected?: boolean;
+  onSelect?: (id: string, selected: boolean) => void;
 }
 
 const PRIORITY_COLOR: Record<string, string> = {
@@ -37,7 +39,7 @@ function formatAge(dateStr: string): string {
   return `${mins}m`;
 }
 
-export const WorkItemRow: React.FC<WorkItemRowProps> = ({ item, onAction }) => {
+export const WorkItemRow: React.FC<WorkItemRowProps> = ({ item, onAction, selected = false, onSelect }) => {
   const { openTriage, upsertItem, isOnline, currentUserRole } = useAppStore();
 
   const fromLabel = item.from?.name ?? item.fromExternal ?? 'External';
@@ -78,15 +80,52 @@ export const WorkItemRow: React.FC<WorkItemRowProps> = ({ item, onAction }) => {
 
   return (
     <div
+      className="work-item-row"
       style={{
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 8,
         padding: '10px 12px',
         background: '#1e293b',
         borderRadius: 8,
         marginBottom: 6,
-        borderLeft: `3px solid ${STATUS_COLOR[item.status] ?? '#475569'}`,
+        borderLeft: `3px solid ${selected ? '#3b82f6' : (STATUS_COLOR[item.status] ?? '#475569')}`,
         opacity: isOnline ? 1 : 0.7,
+        outline: selected ? '1px solid #3b82f633' : 'none',
       }}
     >
+      {/* Checkbox */}
+      <div
+        className="work-item-checkbox"
+        onClick={(e) => { e.stopPropagation(); onSelect?.(item.id, !selected); }}
+        style={{
+          flexShrink: 0,
+          marginTop: 2,
+          width: 16,
+          height: 16,
+          borderRadius: 3,
+          border: `1px solid ${selected ? '#3b82f6' : '#334155'}`,
+          background: selected ? '#3b82f6' : '#1e293b',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          opacity: selected ? 1 : 0,
+          transition: 'opacity 0.15s, background 0.15s, border-color 0.15s',
+        }}
+        role="checkbox"
+        aria-checked={selected}
+        aria-label="Select item"
+      >
+        {selected && (
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path d="M2 5l2.5 2.5L8 2.5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+      </div>
+
+      {/* Row content */}
+      <div style={{ flex: 1, minWidth: 0 }}>
       {/* Header row */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
         <span
@@ -180,6 +219,13 @@ export const WorkItemRow: React.FC<WorkItemRowProps> = ({ item, onAction }) => {
           )}
         </div>
       </div>
+      </div>{/* end row content */}
+
+      <style>{`
+        .work-item-row:hover .work-item-checkbox {
+          opacity: 1 !important;
+        }
+      `}</style>
     </div>
   );
 };

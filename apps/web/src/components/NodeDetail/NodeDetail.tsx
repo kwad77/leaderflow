@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState, useRef, KeyboardEvent } from 'react';
 import { useAppStore } from '../../stores/appStore';
 import { WorkItemRow } from '../FlowPanel/WorkItemRow';
 import { useWorkItems } from '../../hooks/useWorkItems';
-import type { OrgMember, WorkItem } from '@leaderflow/shared';
+import type { OrgMember, WorkItem, WorkItemUpdate } from '@leaderflow/shared';
+import { addItemComment, relativeTime } from '../../lib/api';
 
 interface NodeDetailProps {
   member: OrgMember;
@@ -33,9 +34,217 @@ function getInitials(name: string): string {
     .toUpperCase();
 }
 
+const STATUS_COLORS: Record<string, string> = {
+  PENDING: '#64748b',
+  ACKNOWLEDGED: '#3b82f6',
+  IN_PROGRESS: '#8b5cf6',
+  ON_TRACK: '#22c55e',
+  AT_RISK: '#eab308',
+  STALE: '#f97316',
+  OVERDUE: '#ef4444',
+  COMPLETED: '#10b981',
+  ARCHIVED: '#475569',
+};
+
+interface ActivityFeedProps {
+  item: WorkItem;
+  onCommentAdded: (itemId: string, update: WorkItemUpdate) => void;
+}
+
+const ActivityFeed: React.FC<ActivityFeedProps> = ({ item, onCommentAdded }) => {
+  const [updates, setUpdates] = useState<WorkItemUpdate[]>(item.updates);
+  const [noteText, setNoteText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleSubmit = async () => {
+    const trimmed = noteText.trim();
+    if (!trimmed || submitting) return;
+
+    // Optimistic update
+    const optimistic: WorkItemUpdate = {
+      id: `optimistic-${Date.now()}`,
+      itemId: item.id,
+      note: trimmed,
+      authorId: null,
+      statusChange: null,
+      createdAt: new Date().toISOString(),
+    };
+    setUpdates((prev) => [...prev, optimistic]);
+    setNoteText('');
+    setSubmitting(true);
+
+    try {
+      const created = await addItemComment(item.id, trimmed);
+      setUpdates((prev) =>
+        prev.map((u) => (u.id === optimistic.id ? created : u))
+      );
+      onCommentAdded(item.id, created);
+    } catch {
+      // Roll back on error
+      setUpdates((prev) => prev.filter((u) => u.id !== optimistic.id));
+      setNoteText(trimmed);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') handleSubmit();
+  };
+
+  return (
+    <div
+      style={{
+        background: '#0a1628',
+        borderTop: '1px solid #1e293b',
+        padding: '8px 10px 10px',
+      }}
+    >
+      {/* Timeline */}
+      {updates.length > 0 && (
+        <div style={{ marginBottom: 8 }}>
+          {updates.map((u, idx) => (
+            <div
+              key={u.id}
+              style={{
+                display: 'flex',
+                gap: 8,
+                marginBottom: idx < updates.length - 1 ? 6 : 0,
+              }}
+            >
+              {/* Left border + dot */}
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  width: 12,
+                  flexShrink: 0,
+                }}
+              >
+                <div
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: '50%',
+                    background: u.statusChange
+                      ? STATUS_COLORS[u.statusChange] ?? '#334155'
+                      : '#334155',
+                    marginTop: 3,
+                    flexShrink: 0,
+                  }}
+                />
+                {idx < updates.length - 1 && (
+                  <div
+                    style={{
+                      width: 1,
+                      flex: 1,
+                      background: '#1e293b',
+                      marginTop: 3,
+                    }}
+                  />
+                )}
+              </div>
+
+              {/* Content */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                  {u.statusChange && (
+                    <span
+                      style={{
+                        fontSize: 9,
+                        fontWeight: 600,
+                        color: STATUS_COLORS[u.statusChange] ?? '#64748b',
+                        background: `${STATUS_COLORS[u.statusChange] ?? '#64748b'}22`,
+                        borderRadius: 4,
+                        padding: '1px 5px',
+                        letterSpacing: '0.03em',
+                        textTransform: 'uppercase',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {u.statusChange}
+                    </span>
+                  )}
+                  <span
+                    style={{
+                      fontSize: 10,
+                      color: '#64748b',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {relativeTime(u.createdAt)}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: '#cbd5e1',
+                    marginTop: 2,
+                    lineHeight: 1.4,
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {u.note}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Input row */}
+      <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+        <input
+          ref={inputRef}
+          type="text"
+          value={noteText}
+          onChange={(e) => setNoteText(e.target.value)}
+          onKeyDown={handleKey}
+          placeholder="Add note..."
+          disabled={submitting}
+          style={{
+            flex: 1,
+            background: '#0f172a',
+            border: '1px solid #334155',
+            borderRadius: 5,
+            padding: '4px 7px',
+            fontSize: 11,
+            color: '#f1f5f9',
+            outline: 'none',
+            minWidth: 0,
+          }}
+        />
+        <button
+          onClick={handleSubmit}
+          disabled={submitting || !noteText.trim()}
+          style={{
+            background: noteText.trim() && !submitting ? '#3b82f6' : '#1e293b',
+            border: 'none',
+            borderRadius: 5,
+            color: noteText.trim() && !submitting ? 'white' : '#475569',
+            fontSize: 11,
+            fontWeight: 600,
+            padding: '4px 9px',
+            cursor: noteText.trim() && !submitting ? 'pointer' : 'default',
+            flexShrink: 0,
+            transition: 'background 0.15s',
+          }}
+        >
+          Send
+        </button>
+      </div>
+    </div>
+  );
+};
+
 export const NodeDetail: React.FC<NodeDetailProps> = ({ member, items }) => {
   const { setSelectedMember, openTriage } = useAppStore();
   const { refresh } = useWorkItems();
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  // Track locally added comments so we can reflect them without a full refresh
+  const [localUpdates, setLocalUpdates] = useState<Record<string, WorkItemUpdate[]>>({});
 
   const activeItems = items.filter(
     (i) =>
@@ -49,6 +258,26 @@ export const NodeDetail: React.FC<NodeDetailProps> = ({ member, items }) => {
   const atRisk = activeItems.filter((i) => ['AT_RISK', 'OVERDUE', 'STALE'].includes(i.status));
 
   const roleColor = getRoleColor(member.role);
+
+  const handleToggleItem = (itemId: string) => {
+    setSelectedItemId((prev) => (prev === itemId ? null : itemId));
+  };
+
+  const handleCommentAdded = (itemId: string, update: WorkItemUpdate) => {
+    setLocalUpdates((prev) => ({
+      ...prev,
+      [itemId]: [...(prev[itemId] ?? []), update],
+    }));
+  };
+
+  // Merge local comments into item updates for the feed
+  const enrichedItem = (item: WorkItem): WorkItem => {
+    const extras = localUpdates[item.id] ?? [];
+    if (extras.length === 0) return item;
+    const existingIds = new Set(item.updates.map((u) => u.id));
+    const newExtras = extras.filter((u) => !existingIds.has(u.id));
+    return { ...item, updates: [...item.updates, ...newExtras] };
+  };
 
   return (
     <div
@@ -218,9 +447,37 @@ export const NodeDetail: React.FC<NodeDetailProps> = ({ member, items }) => {
         ) : (
           activeItems
             .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-            .map((item) => (
-              <WorkItemRow key={item.id} item={item} onAction={refresh} />
-            ))
+            .map((item) => {
+              const isExpanded = selectedItemId === item.id;
+              return (
+                <div
+                  key={item.id}
+                  style={{
+                    border: `1px solid ${isExpanded ? '#334155' : 'transparent'}`,
+                    borderRadius: 8,
+                    overflow: 'hidden',
+                    transition: 'border-color 0.15s',
+                    marginBottom: isExpanded ? 6 : 0,
+                  }}
+                >
+                  {/* Clickable item row wrapper */}
+                  <div
+                    onClick={() => handleToggleItem(item.id)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <WorkItemRow item={item} onAction={refresh} />
+                  </div>
+
+                  {/* Activity feed — shown when item is expanded */}
+                  {isExpanded && (
+                    <ActivityFeed
+                      item={enrichedItem(item)}
+                      onCommentAdded={handleCommentAdded}
+                    />
+                  )}
+                </div>
+              );
+            })
         )}
       </div>
     </div>
